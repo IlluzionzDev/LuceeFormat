@@ -26,12 +26,6 @@ pub enum Statement {
     },
     ControlStructure(ControlStructure),
     CfmlTag(CfmlTag),
-    // Invalid statement while parsing, when encountered will never move past
-    // parser step. Will be here instead of intended statement with the error of why it couldn't be parsed
-    Invalid {
-        error: String,
-        token: Token,
-    },
 }
 
 #[derive(Debug, Clone)]

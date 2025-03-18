@@ -10,7 +10,7 @@ fn main() {
     let source = std::fs::read_to_string("test/GenericDAO.cfc").unwrap();
     
     // Create a new parser
-    let mut parser = parser::Parser::new(source);
+    let mut parser = parser::Parser::new(&*source);
     let statements = parser.parse();
 
     let end = start.elapsed().as_millis();

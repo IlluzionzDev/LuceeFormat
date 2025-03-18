@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use phf::phf_map;
 
 #[derive(Debug, PartialEq, Clone)]
+#[derive(Copy)]
 pub enum TokenType {
     // Single-character tokens
     LeftParen,
@@ -105,16 +107,15 @@ pub enum TokenType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Token {
+pub struct Token<'a> {
     pub token_type: TokenType,
-    pub lexeme: String,
+    pub lexeme: &'a str,
     pub line: u32,
     pub column: u32,
 }
 
-pub(crate) struct Lexer {
-    source: String,
-    keywords: HashMap<String, TokenType>,
+pub(crate) struct Lexer<'a> {
+    source: &'a str,
 
     start: usize,
     current: usize,
@@ -122,90 +123,86 @@ pub(crate) struct Lexer {
     column: u32,
 }
 
-impl Lexer {
-    pub fn new(source: String) -> Lexer {
-        let mut keywords = HashMap::new();
+static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
+            "if" => TokenType::If,
+            "else" => TokenType::Else,
+            "for" => TokenType::For,
+            "while" => TokenType::While,
+            "return" => TokenType::Return,
+            "function" => TokenType::Function,
+            "var" => TokenType::Var,
+            "new" => TokenType::New,
+            "true" => TokenType::True,
+            "false" => TokenType::False,
+            "null" => TokenType::Null,
+            "required" => TokenType::Required,
+            "component" => TokenType::Component,
+            "abstract" => TokenType::Abstract,
+            "break" => TokenType::Break,
+            "case" => TokenType::Case,
+            "catch" => TokenType::Catch,
+            "continue" => TokenType::Continue,
+            "contains" => TokenType::Contains,
+            "default" => TokenType::Default,
+            "do" => TokenType::Do,
+            "finally" => TokenType::Finally,
+            "final" => TokenType::Final,
+            "import" => TokenType::Import,
+            "imp" => TokenType::Imp,
+            "interface" => TokenType::Interface,
+            "switch" => TokenType::Switch,
+            "try" => TokenType::Try,
+            "public" => TokenType::Public,
+            "private" => TokenType::Private,
+            "protected" => TokenType::Protected,
+            "eqv" => TokenType::Eqv,
+            "EQV" => TokenType::Eqv,
+            "eq" => TokenType::Eq,
+            "EQ" => TokenType::Eq,
+            "gt" => TokenType::Gt,
+            "GT" => TokenType::Gt,
+            "gte" => TokenType::Gte,
+            "GTE" => TokenType::Gte,
+            "in" => TokenType::In,
+            "IN" => TokenType::In,
+            "lt" => TokenType::Lt,
+            "LT" => TokenType::Lt,
+            "lte" => TokenType::Lte,
+            "LTE" => TokenType::Lte,
+            "neq" => TokenType::Neq,
+            "NEQ" => TokenType::Neq,
+            "not" => TokenType::Not,
+            "NOT" => TokenType::Not,
+            "or" => TokenType::Or,
+            "OR" => TokenType::Or,
+            "and" => TokenType::And,
+            "AND" => TokenType::And,
+            "xor" => TokenType::Xor,
+            "XOR" => TokenType::Xor,
+        };
 
-        keywords.insert(String::from("if"), TokenType::If);
-        keywords.insert(String::from("else"), TokenType::Else);
-        keywords.insert(String::from("for"), TokenType::For);
-        keywords.insert(String::from("while"), TokenType::While);
-        keywords.insert(String::from("return"), TokenType::Return);
-        keywords.insert(String::from("function"), TokenType::Function);
-        keywords.insert(String::from("var"), TokenType::Var);
-        keywords.insert(String::from("new"), TokenType::New);
-        keywords.insert(String::from("true"), TokenType::True);
-        keywords.insert(String::from("false"), TokenType::False);
-        keywords.insert(String::from("null"), TokenType::Null);
-        keywords.insert(String::from("required"), TokenType::Required);
-        keywords.insert(String::from("component"), TokenType::Component);
-        // keywords.insert(String::from("this"), TokenType::This);
-        keywords.insert(String::from("abstract"), TokenType::Abstract);
-        keywords.insert(String::from("break"), TokenType::Break);
-        keywords.insert(String::from("case"), TokenType::Case);
-        keywords.insert(String::from("catch"), TokenType::Catch);
-        keywords.insert(String::from("continue"), TokenType::Continue);
-        keywords.insert(String::from("contains"), TokenType::Contains);
-        keywords.insert(String::from("default"), TokenType::Default);
-        keywords.insert(String::from("do"), TokenType::Do);
-        keywords.insert(String::from("finally"), TokenType::Finally);
-        keywords.insert(String::from("final"), TokenType::Final);
-        keywords.insert(String::from("import"), TokenType::Import);
-        keywords.insert(String::from("imp"), TokenType::Imp);
-        keywords.insert(String::from("interface"), TokenType::Interface);
-        keywords.insert(String::from("switch"), TokenType::Switch);
-        keywords.insert(String::from("try"), TokenType::Try);
-
-        keywords.insert(String::from("public"), TokenType::Public);
-        keywords.insert(String::from("private"), TokenType::Private);
-        keywords.insert(String::from("protected"), TokenType::Protected);
-
-        keywords.insert(String::from("eqv"), TokenType::Eqv);
-        keywords.insert(String::from("EQV"), TokenType::Eqv);
-        keywords.insert(String::from("eq"), TokenType::Eq);
-        keywords.insert(String::from("EQ"), TokenType::Eq);
-        keywords.insert(String::from("gt"), TokenType::Gt);
-        keywords.insert(String::from("GT"), TokenType::Gt);
-        keywords.insert(String::from("gte"), TokenType::Gte);
-        keywords.insert(String::from("GTE"), TokenType::Gte);
-        keywords.insert(String::from("in"), TokenType::In);
-        keywords.insert(String::from("IN"), TokenType::In);
-        keywords.insert(String::from("lt"), TokenType::Lt);
-        keywords.insert(String::from("LT"), TokenType::Lt);
-        keywords.insert(String::from("lte"), TokenType::Lte);
-        keywords.insert(String::from("LTE"), TokenType::Lte);
-        keywords.insert(String::from("neq"), TokenType::Neq);
-        keywords.insert(String::from("NEQ"), TokenType::Neq);
-        keywords.insert(String::from("not"), TokenType::Not);
-        keywords.insert(String::from("NOT"), TokenType::Not);
-        keywords.insert(String::from("or"), TokenType::Or);
-        keywords.insert(String::from("OR"), TokenType::Or);
-        keywords.insert(String::from("and"), TokenType::And);
-        keywords.insert(String::from("AND"), TokenType::And);
-        keywords.insert(String::from("xor"), TokenType::Xor);
-        keywords.insert(String::from("XOR"), TokenType::Xor);
-
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a str) -> Lexer<'a> {
         Lexer {
             source,
             start: 0,
             current: 0,
             line: 1,
             column: 0,
-            keywords,
         }
     }
 
     fn is_at_end(&self) -> bool {
-        self.current >= self.source.len()
+        self.current >= (&self.source).len()
     }
 
-    pub fn scan_token(&mut self) -> Token {
+    pub fn scan_token(&mut self) -> Token<'a> {
         self.start = self.current;
 
         if self.is_at_end() {
             return Token {
                 token_type: TokenType::EOF,
-                lexeme: String::from(""),
+                lexeme: "",
                 line: self.line,
                 column: self.current as u32,
             };
@@ -354,23 +351,18 @@ impl Lexer {
         }
     }
 
-    fn identifier(&mut self) -> Token {
+    fn identifier(&mut self) -> Token<'a> {
         while (self.peek().is_alphanumeric() || self.peek() == '_') && !self.is_at_end() {
             self.advance();
         }
 
-        let text = self.source[self.start..self.current].to_string();
-
-        let token_type = self
-            .keywords
-            .get(&text)
-            .unwrap_or(&TokenType::Identifier)
-            .clone();
+        let text = &self.source[self.start..self.current].to_string();
+        let token_type = KEYWORDS.get(text).copied().unwrap_or(TokenType::Identifier);
 
         self.add_token(token_type)
     }
 
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> Token<'a> {
         let quote = self.source.chars().nth(self.start).unwrap();
 
         // Strings have some special properties in lucee, if you use a raw '#" inside
@@ -395,11 +387,11 @@ impl Lexer {
 
         self.advance();
 
-        let value = self.source[self.start + 1..self.current - 1].to_string();
+        let value = &self.source[self.start + 1..self.current - 1];
         self.add_token_full(TokenType::String, value)
     }
 
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> Token<'a> {
         while self.peek().is_digit(10) {
             self.advance();
         }
@@ -412,7 +404,7 @@ impl Lexer {
             }
         }
 
-        let value = self.source[self.start..self.current].to_string();
+        let value = &self.source[self.start..self.current];
         self.add_token_full(TokenType::Number, value)
     }
 
@@ -431,34 +423,27 @@ impl Lexer {
     }
 
     fn peek(&self) -> char {
-        if self.is_at_end() {
-            return '\0';
-        }
-
-        self.source.chars().nth(self.current).unwrap()
+        self.source.as_bytes().get(self.current).map_or('\0', |&b| b as char)
     }
 
     fn peek_next(&self) -> char {
-        if self.current + 1 >= self.source.len() {
-            return '\0';
-        }
-
-        self.source.chars().nth(self.current + 1).unwrap()
+        self.source.as_bytes().get(self.current + 1).map_or('\0', |&b| b as char)
     }
 
     fn advance(&mut self) -> char {
+        let ch = self.source.as_bytes()[self.current] as char;
         self.current += 1;
         self.column += 1;
-        self.source.chars().nth(self.current - 1).unwrap()
+        ch
     }
 
-    fn add_token(&mut self, token_type: TokenType) -> Token {
-        let text = self.source[self.start..self.current].to_string();
+    fn add_token(&mut self, token_type: TokenType) -> Token<'a> {
+        let text = &self.source[self.start..self.current];
         self.add_token_full(token_type, text)
     }
 
-    fn add_token_full(&mut self, token_type: TokenType, literal: String) -> Token {
-        Token {
+    fn add_token_full(&mut self, token_type: TokenType, literal: &'a str) -> Token<'a> {
+         Token {
             token_type,
             lexeme: literal,
             line: self.line,

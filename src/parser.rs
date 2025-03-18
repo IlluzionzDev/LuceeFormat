@@ -7,11 +7,11 @@ use crate::ast::{
 use crate::lexer::{Lexer, Token, TokenType};
 use std::collections::HashMap;
 
-pub struct Parser {
-    lexer: Lexer,
-    behind: Token,
-    current: Token,
-    ahead: Token,
+pub struct Parser<'a> {
+    lexer: Lexer<'a>,
+    behind: Token<'a>,
+    current: Token<'a>,
+    ahead: Token<'a>,
 }
 
 /**
@@ -20,12 +20,12 @@ pub struct Parser {
 * in Lucee we can't define a function within a function. This Parser will parse that, but not validate
 * that it is correct
 */
-impl Parser {
-    pub fn new(source: String) -> Parser {
+impl<'a> Parser<'a> {
+    pub fn new(source: &'a str) -> Parser<'a> {
         let mut lexer = Lexer::new(source);
-        let current = lexer.scan_token().clone();
-        let ahead = lexer.scan_token().clone();
-        Parser { lexer, current, ahead, behind: Token { token_type: TokenType::EOF, line:0, column:0, lexeme: "".to_string() }}
+        let current = lexer.scan_token();
+        let ahead = lexer.scan_token();
+        Parser { lexer, current, ahead, behind: Token { token_type: TokenType::EOF, line:0, column:0, lexeme: "" }}
     }
 
     fn check(&self, token_type: TokenType) -> bool {
@@ -44,16 +44,14 @@ impl Parser {
         }
     }
 
-    fn advance(&mut self) -> &Token {
-        let start = std::time::Instant::now();
-        self.behind = self.current.clone();
+    fn advance(&mut self) -> &Token<'a> {
+        self.behind = std::mem::replace(&mut self.current, self.ahead.clone());
         if !self.is_at_end() {
-            let new_current = self.ahead.clone();
+            // let start = std::time::Instant::now();
             self.ahead = self.lexer.scan_token();
-            self.current = new_current;
+            // println!("Advance took: {}us", start.elapsed().as_micros());
         }
 
-        println!("Advance took: {}us", start.elapsed().as_micros());
         &self.behind
     }
 
@@ -199,7 +197,7 @@ impl Parser {
     fn variable_declaration(&mut self) -> Statement {
         if self.advance_check(TokenType::Var) {
             let identifier = self.consume(TokenType::Identifier, "Expected variable name");
-            let name = identifier.lexeme.clone();
+            let name = String::from(identifier.lexeme);
             self.consume(TokenType::Equal, "Expected assignment operator '='");
             let value = self.expression();
             self.advance_check(TokenType::Semicolon);
@@ -253,15 +251,14 @@ impl Parser {
 
         let mut return_type = None;
         if self.check(TokenType::Identifier) {
-            return_type = Some(self.advance().lexeme.clone());
+            return_type = Some(String::from(self.advance().lexeme));
         }
 
         self.consume(TokenType::Function, "Expected 'function' keyword");
 
-        let name = self
+        let name = String::from(self
             .consume(TokenType::Identifier, "Expected function name")
-            .lexeme
-            .clone();
+            .lexeme);
 
         self.consume(TokenType::LeftParen, "Expected '('");
         let mut parameters = Vec::new();
@@ -305,16 +302,14 @@ impl Parser {
         let mut param_type = None;
         if self.check(TokenType::Identifier) && self.check_next(TokenType::Identifier) {
             param_type = Some(
-                self.consume(TokenType::Identifier, "Expected parameter type")
-                    .lexeme
-                    .clone(),
+                String::from(self.consume(TokenType::Identifier, "Expected parameter type")
+                    .lexeme)
             );
         }
 
-        let name = self
+        let name = String::from(self
             .consume(TokenType::Identifier, "Expected parameter name")
-            .lexeme
-            .clone();
+            .lexeme);
 
         let mut default_value = None;
         if self.advance_check(TokenType::Equal) {
@@ -371,7 +366,7 @@ impl Parser {
 
         while self.check(TokenType::Identifier) {
             let identifier = self.advance();
-            let name = identifier.lexeme.clone();
+            let name = String::from(identifier.lexeme);
             self.consume(TokenType::Equal, "Expected assignment operator '='");
             let value = self.expression();
             attributes.insert(name, value);
@@ -417,10 +412,9 @@ impl Parser {
         self.advance_check(TokenType::Var);
 
         // Consume identifier, if next keyword is in, is a for in loop
-        let name = self
+        let name = String::from(self
             .consume(TokenType::Identifier, "Expected identifier")
-            .lexeme
-            .clone();
+            .lexeme);
 
         if self.check(TokenType::In) {
             self.consume(TokenType::In, "Expected 'in' keyword");
@@ -519,10 +513,7 @@ impl Parser {
 
             if condition.is_empty() && !is_default {
                 self.error("Expected 'case' or 'default' keyword");
-                return Statement::Invalid {
-                    error: "Expected 'case' or 'default' keyword".to_string(),
-                    token: self.peek().clone(),
-                };
+                panic!("Expected 'case' or 'default' keyword");
             }
 
             // Case body: We consume until break or return expression, since don't need {} to declare
@@ -756,7 +747,7 @@ impl Parser {
     fn primary(&mut self) -> Expression {
         // Literals
         if self.check(TokenType::String) {
-            return ExpLiteral(Literal::String(self.advance().lexeme.clone()));
+            return ExpLiteral(Literal::String(String::from(self.advance().lexeme)));
         }
 
         if self.check(TokenType::Number) {
@@ -783,7 +774,7 @@ impl Parser {
         if self.check(TokenType::Identifier) || self.check(TokenType::Contains) {
             // If followed by (, it's a function call
             if self.check_next(TokenType::LeftParen) {
-                let function = self.advance().lexeme.clone();
+                let function = String::from(self.advance().lexeme);
 
                 self.consume(TokenType::LeftParen, "Expected '('");
 
@@ -796,7 +787,7 @@ impl Parser {
                     loop {
                         // Named argument
                         if self.check_next(TokenType::Equal) {
-                            let name = self.advance().lexeme.clone();
+                            let name = String::from(self.advance().lexeme);
 
                             self.consume(TokenType::Equal, "Expected '='");
 
@@ -839,7 +830,7 @@ impl Parser {
                 return self.lambda_expression();
             }
 
-            return Expression::Identifier(self.advance().lexeme.clone());
+            return Expression::Identifier(String::from(self.advance().lexeme));
         }
 
         // Object creation
@@ -875,7 +866,7 @@ impl Parser {
                 // Key is identifier or String
                 let mut key = String::from("");
                 if self.check(TokenType::Identifier) || self.check(TokenType::String) {
-                    key = self.advance().lexeme.clone();
+                    key = String::from(self.advance().lexeme);
                 } else {
                     self.error("Expected struct key");
                 }
@@ -917,9 +908,8 @@ impl Parser {
 
         while !self.check(TokenType::Lambda) && !self.check(TokenType::RightParen) {
             parameters.push(
-                self.consume(TokenType::Identifier, "Expected identifier")
-                    .lexeme
-                    .clone(),
+                String::from(self.consume(TokenType::Identifier, "Expected identifier")
+                    .lexeme)
             );
             if self.advance_check(TokenType::RightParen) || self.advance_check(TokenType::Lambda) {
                 break;
