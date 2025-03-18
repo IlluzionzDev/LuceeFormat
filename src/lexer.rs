@@ -11,15 +11,13 @@ pub enum TokenType {
     RightBracket,
     Comma,
     Dot,
-    Minus,
     Semicolon,
-    Slash,
-    Star,
     Hash,
 
     // One or two character tokens
     Plus,
     PlusPlus,
+    PlusEqual,
     Bang,
     BangEqual,
     Equal,
@@ -30,6 +28,7 @@ pub enum TokenType {
     Less,
     LessEqual,
     Ampersand,
+    AmpersandEqual,
     AmpersandAmpersand,
     Pipe,
     PipePipe,
@@ -38,6 +37,13 @@ pub enum TokenType {
     QuestionDot,
     Colon,
     ColonColon,
+    Slash,
+    SlashEqual,
+    Star,
+    StarEqual,
+    Minus,
+    MinusMinus,
+    MinusEqual,
 
     // Literals: hold value representation
     Identifier,
@@ -221,11 +227,27 @@ impl Lexer {
             '#' => self.add_token(TokenType::Hash),
             ',' => self.add_token(TokenType::Comma),
             '.' => self.add_token(TokenType::Dot),
-            '-' => self.add_token(TokenType::Minus),
             ';' => self.add_token(TokenType::Semicolon),
-            '*' => self.add_token(TokenType::Star),
+            '*' => {
+                if self.match_char('=') {
+                    self.add_token(TokenType::StarEqual);
+                } else {
+                    self.add_token(TokenType::Star);
+                }
+            }
+            '-' => {
+                if self.match_char('=') {
+                    self.add_token(TokenType::MinusEqual);
+                } else if self.match_char('-') {
+                    self.add_token(TokenType::MinusMinus);
+                } else {
+                    self.add_token(TokenType::Minus);
+                }
+            }
             '+' => {
-                if self.match_char('+') {
+                if self.match_char('=') {
+                    self.add_token(TokenType::PlusEqual);
+                } else if self.match_char('+') {
                     self.add_token(TokenType::PlusPlus);
                 } else {
                     self.add_token(TokenType::Plus);
@@ -248,7 +270,9 @@ impl Lexer {
                 }
             }
             '&' => {
-                if self.match_char('&') {
+                if self.match_char('=') {
+                    self.add_token(TokenType::AmpersandEqual);
+                } else if self.match_char('&') {
                     self.add_token(TokenType::AmpersandAmpersand);
                 } else {
                     self.add_token(TokenType::Ampersand);
@@ -292,7 +316,9 @@ impl Lexer {
                 }
             }
             '/' => {
-                if self.match_char('/') {
+                if self.match_char('=') {
+                    self.add_token(TokenType::SlashEqual);
+                } else if self.match_char('/') {
                     while self.peek() != '\n' && !self.is_at_end() {
                         self.advance();
                     }
@@ -347,10 +373,19 @@ impl Lexer {
 
     fn string(&mut self) {
         let quote = self.source.chars().nth(self.start).unwrap();
-        while self.peek() != quote && !self.is_at_end() {
+        
+        // Strings have some special properties in lucee, if you use a raw '#" inside
+        // a string, it allows you to define code in place until encountering another #"
+        // Need to account for this and parse past this, as in ignore terminal quotes if inside a hash
+        
+        let mut in_hash = false;
+        while (self.peek() != quote && !self.is_at_end()) || in_hash {
             if self.peek() == '\n' {
                 self.line += 1;
                 self.column = 0;
+            }
+            if self.peek() == '#' {
+                in_hash = !in_hash;
             }
             self.advance();
         }

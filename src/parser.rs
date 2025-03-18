@@ -1,5 +1,9 @@
 use crate::ast::Expression::Literal as ExpLiteral;
-use crate::ast::{AccessModifier, BinaryOperator, CaseStatement, ComponentDefinition, ControlStructure, Expression, ForControl, FunctionDefinition, Literal, LoopStatement, Parameter, Statement, UnaryOperator};
+use crate::ast::{
+    AccessModifier, BinaryOperator, CaseStatement, ComponentDefinition, ControlStructure,
+    Expression, ForControl, FunctionDefinition, Literal, LoopStatement, Parameter, Statement,
+    UnaryOperator,
+};
 use crate::lexer::{Token, TokenType};
 use std::collections::HashMap;
 
@@ -114,9 +118,19 @@ impl Parser {
         if self.check(TokenType::Public)
             || self.check(TokenType::Private)
             || self.check(TokenType::Protected)
-            || (self.check(TokenType::Identifier) && !self.check_next(TokenType::LeftParen) && (self.check_next(TokenType::Identifier) || self.check_next(TokenType::Function)))
+            || self.check(TokenType::Function)
+            || (self.check(TokenType::Identifier)
+                && !self.check_next(TokenType::LeftParen)
+                && self.check_next(TokenType::Function))
         {
             return self.function_definition();
+        }
+
+        // Custom lucee function
+        if self.check(TokenType::Identifier)
+            && (self.check_next(TokenType::LeftBrace) || self.check_next(TokenType::Identifier))
+        {
+            return self.lucee_function();
         }
 
         // Component Definition
@@ -153,11 +167,25 @@ impl Parser {
         if self.advance_check(TokenType::Equal) {
             let value = self.expression();
             self.advance_check(TokenType::Semicolon);
-            return Statement::VariableAssignment { name: expression, value };
+            return Statement::VariableAssignment {
+                name: expression,
+                value,
+            };
         }
 
-        // Optional consume semi colon
-        self.advance_check(TokenType::Semicolon);
+        // Shorthand increments, ++ or --
+        // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
+        if self.advance_check(TokenType::PlusPlus) || self.advance_check(TokenType::MinusMinus) {
+            return Statement::ExpressionStmt(Expression::BinaryExpression {
+                left: Box::from(expression),
+                op: match self.previous().token_type {
+                    TokenType::PlusPlus => BinaryOperator::PlusEqual,
+                    TokenType::MinusMinus => BinaryOperator::MinusEqual,
+                    _ => BinaryOperator::PlusEqual,
+                },
+                right: Box::new(Expression::Literal(Literal::Number(1.0))),
+            });
+        }
 
         Statement::ExpressionStmt(expression)
     }
@@ -270,10 +298,11 @@ impl Parser {
         // Defining return type
         let mut param_type = None;
         if self.check(TokenType::Identifier) && self.check_next(TokenType::Identifier) {
-            param_type = Some(self
-                .consume(TokenType::Identifier, "Expected parameter type")
-                .lexeme
-                .clone());
+            param_type = Some(
+                self.consume(TokenType::Identifier, "Expected parameter type")
+                    .lexeme
+                    .clone(),
+            );
         }
 
         let name = self
@@ -297,6 +326,30 @@ impl Parser {
         }
     }
 
+    /**
+     * Lucee function refers to statements that look like the following
+     *
+     * lock name="myLock" type="exclusive" timeout="10" {
+     *
+     * {
+     *
+     * "Calling" a function like a statement with an attribute list
+     */
+    fn lucee_function(&mut self) -> Statement {
+        let identifier = self.consume(TokenType::Identifier, "Expected identifier");
+
+        let attributes = self.attribute_definitions();
+
+        let body = self.consume_statement_block(true);
+
+        self.advance_check(TokenType::Semicolon);
+
+        Statement::LuceeFunction {
+            attributes,
+            body: Some(body),
+        }
+    }
+
     fn component_definition(&mut self) -> Statement {
         self.consume(TokenType::Component, "Expected 'component' keyword");
 
@@ -308,13 +361,16 @@ impl Parser {
     }
 
     fn attribute_definitions(&mut self) -> HashMap<String, Expression> {
+        println!("Trying component attributes");
         let mut attributes = HashMap::new();
 
         while self.check(TokenType::Identifier) {
             let identifier = self.advance();
             let name = identifier.lexeme.clone();
+            println!("Consumed Identifier: {:?}", name);
             self.consume(TokenType::Equal, "Expected assignment operator '='");
             let value = self.expression();
+            println!("Consumed Value: {:?}", value);
             attributes.insert(name, value);
         }
 
@@ -469,11 +525,15 @@ impl Parser {
             // Case body: We consume until break or return expression, since don't need {} to declare
             // statement body
             let mut body = Vec::new();
-            while !self.check(TokenType::Break) && !self.check(TokenType::Return) {
+            while !self.check(TokenType::Break)
+                && !self.check(TokenType::Return)
+                && !self.check(TokenType::RightBrace)
+            {
+                println!("Trying to consume case statements");
                 body.push(self.statement());
             }
 
-            // Parse last break / return statement
+            // Parse last break / return statement, optional as can be empty case
             if self.advance_check(TokenType::Break) {
                 self.consume(TokenType::Semicolon, "Expected ';'");
             } else if self.check(TokenType::Return) {
@@ -500,85 +560,17 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Expression {
-        let mut expression = self.expression_internal();
+        self.ternary()
+    }
 
-        // Check for tokens after main expression
+    fn ternary(&mut self) -> Expression {
+        let mut expression = self.equality();
 
-        // Dot access
-        if self.advance_check(TokenType::Dot) {
-            let other = self.expression();
-
-            return Expression::MemberAccess {
-                object: Box::new(expression),
-                property: Box::new(other),
-            }
-        }
-
-        // Index/map access
-        if self.advance_check(TokenType::LeftBracket) {
-            let index = self.expression();
-            self.consume(TokenType::RightBracket, "Expected ']'");
-            return Expression::IndexAccess {
-                object: Box::new(expression),
-                index: Box::new(index),
-            }
-        }
-
-        // Binary expressions
-        if self.check(TokenType::Plus)
-            || self.check(TokenType::Minus)
-            || self.check(TokenType::Star)
-            || self.check(TokenType::Slash)
-            || self.check(TokenType::EqualEqual)
-            || self.check(TokenType::BangEqual)
-            || self.check(TokenType::Less)
-            || self.check(TokenType::Greater)
-            || self.check(TokenType::LessEqual)
-            || self.check(TokenType::GreaterEqual)
-            || self.check(TokenType::AmpersandAmpersand)
-            || self.check(TokenType::PipePipe)
-            || self.check(TokenType::Eq)
-            || self.check(TokenType::Neq)
-            || self.check(TokenType::Lt)
-            || self.check(TokenType::Gt)
-            || self.check(TokenType::And)
-            || self.check(TokenType::Or)
-        {
-            let operator = self.advance().clone().token_type;
-            let right = self.expression();
-            expression = Expression::BinaryExpression {
-                left: Box::new(expression),
-                op: match operator {
-                    TokenType::Plus => BinaryOperator::Add,
-                    TokenType::Minus => BinaryOperator::Subtract,
-                    TokenType::Star => BinaryOperator::Multiply,
-                    TokenType::Slash => BinaryOperator::Divide,
-                    TokenType::EqualEqual => BinaryOperator::Equal,
-                    TokenType::BangEqual => BinaryOperator::NotEqual,
-                    TokenType::Less => BinaryOperator::Less,
-                    TokenType::Greater => BinaryOperator::Greater,
-                    TokenType::LessEqual => BinaryOperator::LessEqual,
-                    TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
-                    TokenType::AmpersandAmpersand => BinaryOperator::And,
-                    TokenType::PipePipe => BinaryOperator::Or,
-                    TokenType::And => BinaryOperator::LogicalAnd,
-                    TokenType::Or => BinaryOperator::LogicalOr,
-                    TokenType::Eq => BinaryOperator::Eq,
-                    TokenType::Neq => BinaryOperator::Neq,
-                    TokenType::Lt => BinaryOperator::Lt,
-                    TokenType::Gt => BinaryOperator::Gt,
-                    _ => BinaryOperator::Add,
-                },
-                right: Box::new(right),
-            };
-        }
-
-        // Ternary
         if self.advance_check(TokenType::Question) {
             let true_expr = self.expression();
             self.consume(TokenType::Colon, "Expected ':'");
             let false_expr = self.expression();
-            return Expression::TernaryExpression {
+            expression = Expression::TernaryExpression {
                 condition: Box::new(expression),
                 true_expr: Box::new(true_expr),
                 false_expr: Box::new(false_expr),
@@ -588,7 +580,179 @@ impl Parser {
         expression
     }
 
-    fn expression_internal(&mut self) -> Expression {
+    fn equality(&mut self) -> Expression {
+        let mut expression = self.comparison();
+
+        while self.advance_check(TokenType::EqualEqual)
+            || self.advance_check(TokenType::BangEqual)
+            || self.advance_check(TokenType::Eq)
+            || self.advance_check(TokenType::Neq)
+        {
+            let operator = self.previous().clone().token_type;
+            let right = self.comparison();
+            expression = Expression::BinaryExpression {
+                left: Box::new(expression),
+                op: match operator {
+                    TokenType::EqualEqual => BinaryOperator::Equal,
+                    TokenType::BangEqual => BinaryOperator::NotEqual,
+                    TokenType::Eq => BinaryOperator::Eq,
+                    TokenType::Neq => BinaryOperator::Neq,
+                    _ => BinaryOperator::Equal,
+                },
+                right: Box::new(right),
+            };
+        }
+
+        expression
+    }
+
+    fn comparison(&mut self) -> Expression {
+        let mut expression = self.term();
+
+        while self.advance_check(TokenType::Less)
+            || self.advance_check(TokenType::Greater)
+            || self.advance_check(TokenType::LessEqual)
+            || self.advance_check(TokenType::GreaterEqual)
+            || self.advance_check(TokenType::Lt)
+            || self.advance_check(TokenType::Gt)
+            || self.advance_check(TokenType::AmpersandAmpersand)
+            || self.advance_check(TokenType::PipePipe)
+            || self.advance_check(TokenType::And)
+            || self.advance_check(TokenType::Or)
+            || self.advance_check(TokenType::Contains)
+            || self.advance_check(TokenType::Xor)
+        {
+            let operator = self.previous().clone().token_type;
+            let right = self.term();
+            expression = Expression::BinaryExpression {
+                left: Box::new(expression),
+                op: match operator {
+                    TokenType::Less => BinaryOperator::Less,
+                    TokenType::Greater => BinaryOperator::Greater,
+                    TokenType::LessEqual => BinaryOperator::LessEqual,
+                    TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
+                    TokenType::Lt => BinaryOperator::Lt,
+                    TokenType::Gt => BinaryOperator::Gt,
+                    TokenType::AmpersandAmpersand => BinaryOperator::And,
+                    TokenType::PipePipe => BinaryOperator::Or,
+                    TokenType::And => BinaryOperator::LogicalAnd,
+                    TokenType::Or => BinaryOperator::LogicalOr,
+                    TokenType::Contains => BinaryOperator::Contains,
+                    TokenType::Xor => BinaryOperator::Xor,
+                    _ => BinaryOperator::Less,
+                },
+                right: Box::new(right),
+            };
+        }
+
+        expression
+    }
+
+    fn term(&mut self) -> Expression {
+        let mut expression = self.factor();
+
+        while self.advance_check(TokenType::Plus)
+            || self.advance_check(TokenType::Minus)
+            || self.advance_check(TokenType::Ampersand)
+            || self.advance_check(TokenType::PlusEqual)
+            || self.advance_check(TokenType::MinusEqual)
+            || self.advance_check(TokenType::AmpersandEqual)
+        {
+            let operator = self.previous().clone().token_type;
+            let right = self.factor();
+            expression = Expression::BinaryExpression {
+                left: Box::new(expression),
+                op: match operator {
+                    TokenType::Plus => BinaryOperator::Add,
+                    TokenType::Minus => BinaryOperator::Subtract,
+                    TokenType::Ampersand => BinaryOperator::StringConcat,
+                    TokenType::PlusEqual => BinaryOperator::PlusEqual,
+                    TokenType::MinusEqual => BinaryOperator::MinusEqual,
+                    TokenType::AmpersandEqual => BinaryOperator::ConcatEqual,
+                    _ => BinaryOperator::Add,
+                },
+                right: Box::new(right),
+            };
+        }
+
+        expression
+    }
+
+    fn factor(&mut self) -> Expression {
+        let mut expression = self.unary();
+
+        while self.advance_check(TokenType::Star)
+            || self.advance_check(TokenType::Slash)
+            || self.advance_check(TokenType::StarEqual)
+            || self.advance_check(TokenType::SlashEqual)
+        {
+            let operator = self.previous().clone().token_type;
+            let right = self.unary();
+            expression = Expression::BinaryExpression {
+                left: Box::new(expression),
+                op: match operator {
+                    TokenType::Star => BinaryOperator::Multiply,
+                    TokenType::Slash => BinaryOperator::Divide,
+                    TokenType::StarEqual => BinaryOperator::MultiplyEqual,
+                    TokenType::SlashEqual => BinaryOperator::DivideEqual,
+                    _ => BinaryOperator::Multiply,
+                },
+                right: Box::new(right),
+            };
+        }
+
+        expression
+    }
+
+    fn unary(&mut self) -> Expression {
+        // Unary operator - or !
+        if self.check(TokenType::Minus) || self.check(TokenType::Bang) {
+            let operator = self.advance().clone().token_type;
+            let right = self.dot_access();
+            return Expression::UnaryExpression {
+                op: match operator {
+                    TokenType::Minus => UnaryOperator::Negate,
+                    TokenType::Bang => UnaryOperator::Not,
+                    _ => UnaryOperator::Negate,
+                },
+                expr: Box::new(right),
+            };
+        }
+
+        self.dot_access()
+    }
+
+    fn dot_access(&mut self) -> Expression {
+        let mut expression = self.index_access();
+        println!("Dot access {:?}", expression);
+
+        while self.advance_check(TokenType::Dot) {
+            let property = self.index_access();
+            expression = Expression::MemberAccess {
+                object: Box::new(expression),
+                property: Box::new(property),
+            };
+        }
+
+        expression
+    }
+
+    fn index_access(&mut self) -> Expression {
+        let mut expression = self.primary();
+
+        while self.advance_check(TokenType::LeftBracket) {
+            let index = self.expression();
+            self.consume(TokenType::RightBracket, "Expected ']'");
+            expression = Expression::IndexAccess {
+                object: Box::new(expression),
+                index: Box::new(index),
+            };
+        }
+
+        expression
+    }
+
+    fn primary(&mut self) -> Expression {
         // Literals
         if self.check(TokenType::String) {
             return ExpLiteral(Literal::String(self.advance().lexeme.clone()));
@@ -613,22 +777,9 @@ impl Parser {
             return ExpLiteral(Literal::Null);
         }
 
-        // Unary operator - or !
-        if self.check(TokenType::Minus) || self.check(TokenType::Bang) {
-            let operator = self.advance().clone().token_type;
-            let expr = self.expression();
-            return Expression::UnaryExpression {
-                op: match operator {
-                    TokenType::Minus => UnaryOperator::Negate,
-                    TokenType::Bang => UnaryOperator::Not,
-                    _ => UnaryOperator::Negate,
-                },
-                expr: Box::new(expr),
-            };
-        }
-
-        // Identifier
-        if self.check(TokenType::Identifier) {
+        // Identifier for function call
+        // Edge-case: contains is both a keyword and a in-build function
+        if self.check(TokenType::Identifier) || self.check(TokenType::Contains) {
             // If followed by (, it's a function call
             if self.check_next(TokenType::LeftParen) {
                 let function = self.advance().lexeme.clone();
@@ -664,7 +815,6 @@ impl Parser {
                         }
                     }
 
-                    println!("expect here");
                     self.consume(TokenType::RightParen, "Expected ')'");
 
                     self.advance_check(TokenType::Semicolon);
@@ -691,6 +841,7 @@ impl Parser {
             return Expression::Identifier(self.advance().lexeme.clone());
         }
 
+        // Object creation
         if self.advance_check(TokenType::New) {
             let expression = self.expression();
             match expression {
@@ -730,7 +881,9 @@ impl Parser {
                 } else {
                     self.error("Expected struct key");
                 }
-                self.consume(TokenType::Colon, "Expected ':'");
+                if !self.advance_check(TokenType::Colon) && !self.advance_check(TokenType::Equal) {
+                    self.error("Struct keys can be assigned with ':' or '='");
+                }
                 let value = self.expression();
                 elements.insert(key, value);
                 if self.advance_check(TokenType::RightBrace) {
@@ -743,16 +896,22 @@ impl Parser {
 
         // Lambda expression
         if self.advance_check(TokenType::LeftParen) {
-            // Try group expression first
+            println!("Trying lambda expression");
+            if (self.check(TokenType::Identifier)
+                && (self.check_next(TokenType::Comma) || self.check_next(TokenType::RightParen)))
+                || self.check(TokenType::RightParen)
+            {
+                let expression = self.lambda_expression();
+                return expression;
+            }
 
-            // Multiple arguments
-            let expression = self.lambda_expression();
-            return expression;
+            // Finally, group back to expression
+            let expression = self.expression();
+            self.consume(TokenType::RightParen, "Expected ')'");
+            return Expression::GroupExpression(Box::new(expression));
         }
 
-        // TODO: Group expression, surrounding expression with ()
-
-        ExpLiteral(Literal::Null)
+        Expression::None
     }
 
     fn lambda_expression(&mut self) -> Expression {

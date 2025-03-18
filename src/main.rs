@@ -7,7 +7,7 @@ fn main() {
     let start = std::time::Instant::now();
     
     // Read in test.cfm into a string
-    let source = std::fs::read_to_string("test/pwf.cfm").unwrap();
+    let source = std::fs::read_to_string("test/GenericDAO.cfc").unwrap();
     
     // Create a new lexer
     let mut lexer = lexer::Lexer::new(source);

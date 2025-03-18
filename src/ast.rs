@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::lexer::Token;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Program {
@@ -9,37 +9,70 @@ pub enum Program {
 #[derive(Debug, Clone)]
 pub enum Statement {
     ExpressionStmt(Expression),
-    VariableDeclaration { name: String, value: Expression },
-    VariableAssignment { name: Expression, value: Expression },
+    VariableDeclaration {
+        name: String,
+        value: Expression,
+    },
+    VariableAssignment {
+        name: Expression,
+        value: Expression,
+    },
     ReturnStatement(Option<Expression>),
     FunctionDefinition(FunctionDefinition),
     ComponentDefinition(ComponentDefinition),
+    LuceeFunction {
+        attributes: HashMap<String, Expression>,
+        body: Option<Vec<Statement>>,
+    },
     ControlStructure(ControlStructure),
     CfmlTag(CfmlTag),
     // Invalid statement while parsing, when encountered will never move past
     // parser step. Will be here instead of intended statement with the error of why it couldn't be parsed
-    Invalid { error: String, token: Token }, 
+    Invalid {
+        error: String,
+        token: Token,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub enum Expression {
     Literal(Literal),
     Identifier(String),
-    FunctionCall { name: String, args: Vec<(Option<String>, Expression)> },
+    FunctionCall {
+        name: String,
+        args: Vec<(Option<String>, Expression)>,
+    },
     ObjectCreation(Box<Expression>),
     ArrayExpression(Vec<Expression>),
     StructExpression(HashMap<String, Expression>),
-    LambdaExpression { parameters: Vec<String>, body: Vec<Statement> },
-    BinaryExpression { left: Box<Expression>, op: BinaryOperator, right: Box<Expression> },
-    UnaryExpression { op: UnaryOperator, expr: Box<Expression> },
-    TernaryExpression { condition: Box<Expression>, true_expr: Box<Expression>, false_expr: Box<Expression> },
+    LambdaExpression {
+        parameters: Vec<String>,
+        body: Vec<Statement>,
+    },
+    BinaryExpression {
+        left: Box<Expression>,
+        op: BinaryOperator,
+        right: Box<Expression>,
+    },
+    UnaryExpression {
+        op: UnaryOperator,
+        expr: Box<Expression>,
+    },
+    TernaryExpression {
+        condition: Box<Expression>,
+        true_expr: Box<Expression>,
+        false_expr: Box<Expression>,
+    },
     GroupExpression(Box<Expression>),
-    MemberAccess { object: Box<Expression>, property: Box<Expression> },
-    IndexAccess { object: Box<Expression>, index: Box<Expression> },
-    // Invalid statement while parsing, when encountered will never move past
-    // parser step. Will be here instead of intended statement with the error of why it couldn't be parsed
-    Invalid { error: String, token: Token },
-    None // Trying to consume expression but there is none
+    MemberAccess {
+        object: Box<Expression>,
+        property: Box<Expression>,
+    },
+    IndexAccess {
+        object: Box<Expression>,
+        index: Box<Expression>,
+    },
+    None, // Trying to consume expression but there is none. Represented by blank space
 }
 
 #[derive(Debug, Clone)]
@@ -52,16 +85,40 @@ pub enum Literal {
 
 #[derive(Debug, Clone)]
 pub enum BinaryOperator {
-    Add, Subtract, Multiply, Divide,
-    Equal, NotEqual, Less, Greater, LessEqual, GreaterEqual,
-    And, Or, Eq, Neq, Lt, Gt, 
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Equal,
+    NotEqual,
+    Less,
+    Greater,
+    LessEqual,
+    GreaterEqual,
+    And,
+    Or,
+    Xor,
+    Contains,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    StringConcat,
     LogicalAnd, // Actual AND
-    LogicalOr, // Actual OR
+    LogicalOr,  // Actual OR
+    PlusEqual,
+    DivideEqual,
+    MultiplyEqual,
+    MinusEqual,
+    PlusPlus,
+    MinusMinus,
+    ConcatEqual,
 }
 
 #[derive(Debug, Clone)]
 pub enum UnaryOperator {
-    Not, Negate,
+    Not,
+    Negate,
 }
 
 #[derive(Debug, Clone)]
@@ -81,7 +138,9 @@ pub struct ComponentDefinition {
 
 #[derive(Debug, Clone)]
 pub enum AccessModifier {
-    Public, Private, Protected,
+    Public,
+    Private,
+    Protected,
 }
 
 #[derive(Debug, Clone)]
@@ -94,24 +153,51 @@ pub struct Parameter {
 
 #[derive(Debug, Clone)]
 pub enum ControlStructure {
-    IfStatement { condition: Expression, body: Vec<Statement>, else_body: Option<Vec<Statement>> },
+    IfStatement {
+        condition: Expression,
+        body: Vec<Statement>,
+        else_body: Option<Vec<Statement>>,
+    },
     LoopStatement(LoopStatement),
-    SwitchStatement { expression: Expression, cases: Vec<CaseStatement> },
-    TryCatchStatement { try_body: Vec<Statement>, catch_var: String, catch_body: Vec<Statement> },
+    SwitchStatement {
+        expression: Expression,
+        cases: Vec<CaseStatement>,
+    },
+    TryCatchStatement {
+        try_body: Vec<Statement>,
+        catch_var: String,
+        catch_body: Vec<Statement>,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub enum LoopStatement {
-    For { control: ForControl, body: Vec<Statement> },
-    While { condition: Expression, body: Vec<Statement> },
-    DoWhile { body: Vec<Statement>, condition: Expression },
+    For {
+        control: ForControl,
+        body: Vec<Statement>,
+    },
+    While {
+        condition: Expression,
+        body: Vec<Statement>,
+    },
+    DoWhile {
+        body: Vec<Statement>,
+        condition: Expression,
+    },
 }
 
 // Used to determine if For loop is traditional var i = 0, or for (i in array)
 #[derive(Debug, Clone)]
 pub enum ForControl {
-    Increment { init: Expression, condition: Expression, increment: Expression },
-    LoopOver { variable: String, array: Expression }
+    Increment {
+        init: Expression,
+        condition: Expression,
+        increment: Expression,
+    },
+    LoopOver {
+        variable: String,
+        array: Expression,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -123,9 +209,20 @@ pub struct CaseStatement {
 
 #[derive(Debug, Clone)]
 pub enum CfmlTag {
-    CfSet { name: String, value: Expression },
-    CfIf { condition: Expression, body: Vec<Statement>, else_body: Option<Vec<Statement>> },
-    GeneralCfmlTag { name: String, attributes: HashMap<String, Expression>, body: Vec<Statement> },
+    CfSet {
+        name: String,
+        value: Expression,
+    },
+    CfIf {
+        condition: Expression,
+        body: Vec<Statement>,
+        else_body: Option<Vec<Statement>>,
+    },
+    GeneralCfmlTag {
+        name: String,
+        attributes: HashMap<String, Expression>,
+        body: Vec<Statement>,
+    },
 }
 
 #[derive(Debug, Clone)]

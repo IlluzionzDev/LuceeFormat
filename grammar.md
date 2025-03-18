@@ -13,38 +13,66 @@
 
 <expression_statement> ::= <expression> ";"?
 
-<expression> ::= <literal>
-               | <identifier>
+<expression> ::= <ternary>
+
+// TODO ?: operator
+<ternary> ::= <equality> "?" <ternary> ":" <ternary> | <equality>
+
+<equality> ::= <comparison> (( "==" | "!=" || "EQ" || "NEQ" ) <comparison>)* | <comparison>
+
+<comparison> ::= <term> (<comparison_operator> <term>)* | <term>
+
+// & for string concatenation grouped for here ease
+<term> ::= <factor> (( "+" | "-" | "+=" | "-=" | "&" | "&=" ) <factor>)* | <factor>
+
+// TODO: ^ operator
+<factor> ::= <unary> (( "*" | "/" | "*=" | "/=" ) <unary>)* | <unary>
+
+<unary> ::= ( "!" | "-" ) <unary> | <dot_access>
+
+<dot_access> ::= <index_access> ("." <index_access>)* | index_access
+
+<index_access> ::= <primary> ("[" <expression> "]")* | <primary>
+
+<primary> :== <literal> | <identifier>
                | <function_call>
                | <object_creation>
                | <array_expression>
                | <struct_expression>
                | <lambda_expression>
                | "(" <expression> ")"
-               | <unary_expression>
-               | <binary_expression>
-               | <ternary_expression>
-               | <expression> "." <expression>
-               | <expression> "[" <expression> "]" <expression>?
 
 <literal> ::= <number>
             | <string>
             | <boolean>
             | "null"
 
+<function_call> ::= <identifier> "(" <argument_list> ")"
+
+<argument_list> ::= <expression> | <expression> "," <argument_list>
+
+<comparison_operator> ::= "<" | ">" | "<=" | ">=" | "&&" | "||" | "LT" | "GT" | "AND" | "OR" | "XOR" | "CONTAINS"
+
 <identifier> ::= /[a-zA-Z_][a-zA-Z0-9_]*/
 
 <variable_declaration> ::= "var" <identifier> "=" <expression> ";"?
 
+// TODO: Short hand assignments, +=, -=, /=, *=, ++, --, &=
 <variable_assignment> ::= <expression> "=" <expression> ";"?
 
 <return_statement> ::= "return" <expression> ";"?
 
 <object_creation> ::= "new" <expression>
 
-<ternary_expression> ::= <expression> "?" <expression> ":" <expression>
-
 <function_definition> ::= <access_modifier>? <identifier> "function" <identifier> "(" <parameter_list> ")" "{" <statement_list> "}"
+
+// Special lucee functions like
+// transaction {
+// }
+// or
+// lock name="myLock" type="exclusive" timeout="10" {
+// }
+<lucee_function> ::= <identifier> <loop_attribute_list>? "{" <statement_list> "}"
 
 <component_definition> ::= "component" <loop_attribute_list>? "{" <statement_list> "}"
 
@@ -54,23 +82,11 @@
 
 <parameter> ::= "required"? (<identifier> | <identifier> <identifier> | <identifier> <identifier> "=" <expression>)
 
-<function_call> ::= <identifier> "(" <argument_list> ")"
-
-<argument_list> ::= <expression> | <expression> "," <argument_list> | ε
-
-<binary_expression> ::= <expression> <binary_operator> <expression>
-
-<binary_operator> ::= "+" | "-" | "*" | "/" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" | "EQ" | "NEQ" | "LT" | "GT" | "AND" | "OR"
-
-<unary_expression> ::= <unary_operator> <expression>
-
-<unary_operator> ::= "!" | "-"
-
 <array_expression> ::= "[" <expression> ("," <expression>)* "]"
 
 <struct_expression> ::= "{" <key_value_pair> ("," <key_value_pair>)* "}"
 
-<key_value_pair> ::= <literal> ":" <expression>
+<key_value_pair> ::= <literal> (":" || "=") <expression>
 
 <lambda_expression> ::= ("(" <identifier> ("," <identifier>)* ")" | <identifier>) "=>" (<statement_list> | "{" <statement_list> "}" )
 
@@ -101,6 +117,9 @@
 <cfml_tag> ::= "<cfset" <variable_declaration> ">"
 | "<cfif" <expression> ">" <statement_list> "<cfelse>" <statement_list> "<cfif>"
 | <general_cfml_tag>
+
+# TODO: Special cfml tags such as cfoutput and cfquery, treat inside tags
+# as raw text
 
 <general_cfml_tag> ::= "<cf" <identifier> (<expression> | <loop_attribute_list>) "/"? ">" <statement_list> ("</cf" <identifier> ">")?
 
