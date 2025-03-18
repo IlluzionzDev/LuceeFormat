@@ -114,7 +114,6 @@ pub struct Token {
 
 pub(crate) struct Lexer {
     source: String,
-    pub(crate) tokens: Vec<Token>,
     keywords: HashMap<String, TokenType>,
 
     start: usize,
@@ -188,7 +187,6 @@ impl Lexer {
 
         Lexer {
             source,
-            tokens: Vec::new(),
             start: 0,
             current: 0,
             line: 1,
@@ -201,21 +199,18 @@ impl Lexer {
         self.current >= self.source.len()
     }
 
-    pub(crate) fn scan_tokens(&mut self) {
-        while !self.is_at_end() {
-            self.start = self.current;
-            self.scan_token();
+    pub fn scan_token(&mut self) -> Token {
+        self.start = self.current;
+
+        if self.is_at_end() {
+            return Token {
+                token_type: TokenType::EOF,
+                lexeme: String::from(""),
+                line: self.line,
+                column: self.current as u32,
+            };
         }
 
-        self.tokens.push(Token {
-            token_type: TokenType::EOF,
-            lexeme: String::from(""),
-            line: self.line,
-            column: self.current as u32,
-        });
-    }
-
-    fn scan_token(&mut self) {
         let c = self.advance();
         match c {
             '(' => self.add_token(TokenType::LeftParen),
@@ -230,98 +225,99 @@ impl Lexer {
             ';' => self.add_token(TokenType::Semicolon),
             '*' => {
                 if self.match_char('=') {
-                    self.add_token(TokenType::StarEqual);
+                    self.add_token(TokenType::StarEqual)
                 } else {
-                    self.add_token(TokenType::Star);
+                    self.add_token(TokenType::Star)
                 }
             }
             '-' => {
                 if self.match_char('=') {
-                    self.add_token(TokenType::MinusEqual);
+                    self.add_token(TokenType::MinusEqual)
                 } else if self.match_char('-') {
-                    self.add_token(TokenType::MinusMinus);
+                    self.add_token(TokenType::MinusMinus)
                 } else {
-                    self.add_token(TokenType::Minus);
+                    self.add_token(TokenType::Minus)
                 }
             }
             '+' => {
                 if self.match_char('=') {
-                    self.add_token(TokenType::PlusEqual);
+                    self.add_token(TokenType::PlusEqual)
                 } else if self.match_char('+') {
-                    self.add_token(TokenType::PlusPlus);
+                    self.add_token(TokenType::PlusPlus)
                 } else {
-                    self.add_token(TokenType::Plus);
+                    self.add_token(TokenType::Plus)
                 }
             }
             ':' => {
                 if self.match_char(':') {
-                    self.add_token(TokenType::ColonColon);
+                    self.add_token(TokenType::ColonColon)
                 } else {
-                    self.add_token(TokenType::Colon);
+                    self.add_token(TokenType::Colon)
                 }
             }
             '?' => {
                 if self.match_char(':') {
-                    self.add_token(TokenType::QuestionColon);
+                    self.add_token(TokenType::QuestionColon)
                 } else if self.match_char('.') {
-                    self.add_token(TokenType::QuestionDot);
+                    self.add_token(TokenType::QuestionDot)
                 } else {
-                    self.add_token(TokenType::Question);
+                    self.add_token(TokenType::Question)
                 }
             }
             '&' => {
                 if self.match_char('=') {
-                    self.add_token(TokenType::AmpersandEqual);
+                    self.add_token(TokenType::AmpersandEqual)
                 } else if self.match_char('&') {
-                    self.add_token(TokenType::AmpersandAmpersand);
+                    self.add_token(TokenType::AmpersandAmpersand)
                 } else {
-                    self.add_token(TokenType::Ampersand);
+                    self.add_token(TokenType::Ampersand)
                 }
             }
             '|' => {
                 if self.match_char('|') {
-                    self.add_token(TokenType::PipePipe);
+                    self.add_token(TokenType::PipePipe)
                 } else {
-                    self.add_token(TokenType::Pipe);
+                    self.add_token(TokenType::Pipe)
                 }
             }
             '!' => {
                 if self.match_char('=') {
-                    self.add_token(TokenType::BangEqual);
+                    self.add_token(TokenType::BangEqual)
                 } else {
-                    self.add_token(TokenType::Bang);
+                    self.add_token(TokenType::Bang)
                 }
             }
             '=' => {
                 if self.match_char('>') {
-                    self.add_token(TokenType::Lambda);
+                    self.add_token(TokenType::Lambda)
                 } else if self.match_char('=') {
-                    self.add_token(TokenType::EqualEqual);
+                    self.add_token(TokenType::EqualEqual)
                 } else {
-                    self.add_token(TokenType::Equal);
+                    self.add_token(TokenType::Equal)
                 }
             }
             '<' => {
                 if self.match_char('=') {
-                    self.add_token(TokenType::LessEqual);
+                    self.add_token(TokenType::LessEqual)
                 } else {
-                    self.add_token(TokenType::Less);
+                    self.add_token(TokenType::Less)
                 }
             }
             '>' => {
                 if self.match_char('=') {
-                    self.add_token(TokenType::GreaterEqual);
+                    self.add_token(TokenType::GreaterEqual)
                 } else {
-                    self.add_token(TokenType::Greater);
+                    self.add_token(TokenType::Greater)
                 }
             }
             '/' => {
                 if self.match_char('=') {
-                    self.add_token(TokenType::SlashEqual);
+                    self.add_token(TokenType::SlashEqual)
                 } else if self.match_char('/') {
                     while self.peek() != '\n' && !self.is_at_end() {
                         self.advance();
                     }
+                    self.scan_token()
                     // self.add_token(TokenType::Comment);
                 } else if self.match_char('*') {
                     while (self.peek() != '*' || self.peek_next() != '/') && !self.is_at_end() {
@@ -333,21 +329,23 @@ impl Lexer {
                     }
                     self.advance();
                     self.advance();
+                    self.scan_token()
                     // self.add_token(TokenType::Comment);
                 } else {
-                    self.add_token(TokenType::Slash);
+                    self.add_token(TokenType::Slash)
                 }
             }
             '"' | '\'' => self.string(),
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
-            ' ' | '\r' | '\t' => (),
+            ' ' | '\r' | '\t' => self.scan_token(),
             '\n' => {
                 // self.add_token(TokenType::NewLine);
                 self.line += 1;
                 self.column = 0;
+                self.scan_token()
             }
-            _ => println!(
+            _ => panic!(
                 "Unexpected character {0} at {1}:{2}",
                 self.source[self.start..self.current].to_string(),
                 self.line,
@@ -356,28 +354,29 @@ impl Lexer {
         }
     }
 
-    fn identifier(&mut self) {
+    fn identifier(&mut self) -> Token {
         while (self.peek().is_alphanumeric() || self.peek() == '_') && !self.is_at_end() {
             self.advance();
         }
 
         let text = self.source[self.start..self.current].to_string();
 
-        let token_type = self.keywords
+        let token_type = self
+            .keywords
             .get(&text)
             .unwrap_or(&TokenType::Identifier)
             .clone();
-        
-        self.add_token(token_type);
+
+        self.add_token(token_type)
     }
 
-    fn string(&mut self) {
+    fn string(&mut self) -> Token {
         let quote = self.source.chars().nth(self.start).unwrap();
-        
+
         // Strings have some special properties in lucee, if you use a raw '#" inside
         // a string, it allows you to define code in place until encountering another #"
         // Need to account for this and parse past this, as in ignore terminal quotes if inside a hash
-        
+
         let mut in_hash = false;
         while (self.peek() != quote && !self.is_at_end()) || in_hash {
             if self.peek() == '\n' {
@@ -391,17 +390,16 @@ impl Lexer {
         }
 
         if self.is_at_end() {
-            println!("Unterminated string at {0}:{1}", self.line, self.current);
-            return;
+            panic!("Unterminated string at {0}:{1}", self.line, self.current);
         }
 
         self.advance();
 
         let value = self.source[self.start + 1..self.current - 1].to_string();
-        self.add_token_full(TokenType::String, value);
+        self.add_token_full(TokenType::String, value)
     }
 
-    fn number(&mut self) {
+    fn number(&mut self) -> Token {
         while self.peek().is_digit(10) {
             self.advance();
         }
@@ -415,7 +413,7 @@ impl Lexer {
         }
 
         let value = self.source[self.start..self.current].to_string();
-        self.add_token_full(TokenType::Number, value);
+        self.add_token_full(TokenType::Number, value)
     }
 
     fn match_char(&mut self, expected: char) -> bool {
@@ -454,17 +452,17 @@ impl Lexer {
         self.source.chars().nth(self.current - 1).unwrap()
     }
 
-    fn add_token(&mut self, token_type: TokenType) {
+    fn add_token(&mut self, token_type: TokenType) -> Token {
         let text = self.source[self.start..self.current].to_string();
-        self.add_token_full(token_type, text);
+        self.add_token_full(token_type, text)
     }
 
-    fn add_token_full(&mut self, token_type: TokenType, literal: String) {
-        self.tokens.push(Token {
+    fn add_token_full(&mut self, token_type: TokenType, literal: String) -> Token {
+        Token {
             token_type,
             lexeme: literal,
             line: self.line,
             column: self.column as u32,
-        });
+        }
     }
 }

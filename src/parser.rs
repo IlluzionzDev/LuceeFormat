@@ -4,12 +4,14 @@ use crate::ast::{
     Expression, ForControl, FunctionDefinition, Literal, LoopStatement, Parameter, Statement,
     UnaryOperator,
 };
-use crate::lexer::{Token, TokenType};
+use crate::lexer::{Lexer, Token, TokenType};
 use std::collections::HashMap;
 
 pub struct Parser {
-    tokens: Vec<Token>,
-    current: usize,
+    lexer: Lexer,
+    behind: Token,
+    current: Token,
+    ahead: Token,
 }
 
 /**
@@ -19,8 +21,11 @@ pub struct Parser {
 * that it is correct
 */
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Parser {
-        Parser { tokens, current: 0 }
+    pub fn new(source: String) -> Parser {
+        let mut lexer = Lexer::new(source);
+        let current = lexer.scan_token().clone();
+        let ahead = lexer.scan_token().clone();
+        Parser { lexer, current, ahead, behind: Token { token_type: TokenType::EOF, line:0, column:0, lexeme: "".to_string() }}
     }
 
     fn check(&self, token_type: TokenType) -> bool {
@@ -40,17 +45,22 @@ impl Parser {
     }
 
     fn advance(&mut self) -> &Token {
+        let start = std::time::Instant::now();
+        self.behind = self.current.clone();
         if !self.is_at_end() {
-            self.current += 1;
+            let new_current = self.ahead.clone();
+            self.ahead = self.lexer.scan_token();
+            self.current = new_current;
         }
 
-        self.previous()
+        println!("Advance took: {}us", start.elapsed().as_micros());
+        &self.behind
     }
 
     // Check next token is token_type, and if so advance.
     // If not match, safe exit
     fn advance_check(&mut self, token_type: TokenType) -> bool {
-        println!("Advance Check: {0:?}, {1:?}", self.peek(), token_type);
+        // println!("Advance Check: {0:?}, {1:?}", self.peek(), token_type);
         if self.check(token_type) {
             self.advance();
             true
@@ -61,7 +71,7 @@ impl Parser {
 
     // Expect token and consume, otherwise error
     fn consume(&mut self, token_type: TokenType, error: &str) -> &Token {
-        println!("Consume: {0:?}, {1:?}", self.peek(), token_type);
+        // println!("Consume: {0:?}, {1:?}", self.peek(), token_type);
         if self.check(token_type) {
             return self.advance();
         }
@@ -79,15 +89,11 @@ impl Parser {
     }
 
     fn peek(&self) -> &Token {
-        &self.tokens[self.current]
+        &self.current
     }
 
     fn peek_next(&self) -> &Token {
-        &self.tokens[self.current + 1]
-    }
-
-    fn previous(&self) -> &Token {
-        &self.tokens[self.current - 1]
+        &self.ahead
     }
 
     pub fn parse(&mut self) -> Vec<Statement> {
@@ -108,7 +114,6 @@ impl Parser {
 
         if self.check(TokenType::Return) {
             self.advance();
-            // TODO: Return doesn't need an expression
             let expression = self.expression();
             self.advance_check(TokenType::Semicolon);
             return Statement::ReturnStatement(Some(expression));
@@ -175,10 +180,11 @@ impl Parser {
 
         // Shorthand increments, ++ or --
         // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
-        if self.advance_check(TokenType::PlusPlus) || self.advance_check(TokenType::MinusMinus) {
+        if self.check(TokenType::PlusPlus) || self.check(TokenType::MinusMinus) {
+            let op = self.advance();
             return Statement::ExpressionStmt(Expression::BinaryExpression {
                 left: Box::from(expression),
-                op: match self.previous().token_type {
+                op: match op.token_type {
                     TokenType::PlusPlus => BinaryOperator::PlusEqual,
                     TokenType::MinusMinus => BinaryOperator::MinusEqual,
                     _ => BinaryOperator::PlusEqual,
@@ -361,16 +367,13 @@ impl Parser {
     }
 
     fn attribute_definitions(&mut self) -> HashMap<String, Expression> {
-        println!("Trying component attributes");
         let mut attributes = HashMap::new();
 
         while self.check(TokenType::Identifier) {
             let identifier = self.advance();
             let name = identifier.lexeme.clone();
-            println!("Consumed Identifier: {:?}", name);
             self.consume(TokenType::Equal, "Expected assignment operator '='");
             let value = self.expression();
-            println!("Consumed Value: {:?}", value);
             attributes.insert(name, value);
         }
 
@@ -529,7 +532,6 @@ impl Parser {
                 && !self.check(TokenType::Return)
                 && !self.check(TokenType::RightBrace)
             {
-                println!("Trying to consume case statements");
                 body.push(self.statement());
             }
 
@@ -583,12 +585,12 @@ impl Parser {
     fn equality(&mut self) -> Expression {
         let mut expression = self.comparison();
 
-        while self.advance_check(TokenType::EqualEqual)
-            || self.advance_check(TokenType::BangEqual)
-            || self.advance_check(TokenType::Eq)
-            || self.advance_check(TokenType::Neq)
+        while self.check(TokenType::EqualEqual)
+            || self.check(TokenType::BangEqual)
+            || self.check(TokenType::Eq)
+            || self.check(TokenType::Neq)
         {
-            let operator = self.previous().clone().token_type;
+            let operator = self.advance().clone().token_type;
             let right = self.comparison();
             expression = Expression::BinaryExpression {
                 left: Box::new(expression),
@@ -609,20 +611,20 @@ impl Parser {
     fn comparison(&mut self) -> Expression {
         let mut expression = self.term();
 
-        while self.advance_check(TokenType::Less)
-            || self.advance_check(TokenType::Greater)
-            || self.advance_check(TokenType::LessEqual)
-            || self.advance_check(TokenType::GreaterEqual)
-            || self.advance_check(TokenType::Lt)
-            || self.advance_check(TokenType::Gt)
-            || self.advance_check(TokenType::AmpersandAmpersand)
-            || self.advance_check(TokenType::PipePipe)
-            || self.advance_check(TokenType::And)
-            || self.advance_check(TokenType::Or)
-            || self.advance_check(TokenType::Contains)
-            || self.advance_check(TokenType::Xor)
+        while self.check(TokenType::Less)
+            || self.check(TokenType::Greater)
+            || self.check(TokenType::LessEqual)
+            || self.check(TokenType::GreaterEqual)
+            || self.check(TokenType::Lt)
+            || self.check(TokenType::Gt)
+            || self.check(TokenType::AmpersandAmpersand)
+            || self.check(TokenType::PipePipe)
+            || self.check(TokenType::And)
+            || self.check(TokenType::Or)
+            || self.check(TokenType::Contains)
+            || self.check(TokenType::Xor)
         {
-            let operator = self.previous().clone().token_type;
+            let operator = self.advance().clone().token_type;
             let right = self.term();
             expression = Expression::BinaryExpression {
                 left: Box::new(expression),
@@ -651,14 +653,14 @@ impl Parser {
     fn term(&mut self) -> Expression {
         let mut expression = self.factor();
 
-        while self.advance_check(TokenType::Plus)
-            || self.advance_check(TokenType::Minus)
-            || self.advance_check(TokenType::Ampersand)
-            || self.advance_check(TokenType::PlusEqual)
-            || self.advance_check(TokenType::MinusEqual)
-            || self.advance_check(TokenType::AmpersandEqual)
+        while self.check(TokenType::Plus)
+            || self.check(TokenType::Minus)
+            || self.check(TokenType::Ampersand)
+            || self.check(TokenType::PlusEqual)
+            || self.check(TokenType::MinusEqual)
+            || self.check(TokenType::AmpersandEqual)
         {
-            let operator = self.previous().clone().token_type;
+            let operator = self.advance().clone().token_type;
             let right = self.factor();
             expression = Expression::BinaryExpression {
                 left: Box::new(expression),
@@ -681,12 +683,12 @@ impl Parser {
     fn factor(&mut self) -> Expression {
         let mut expression = self.unary();
 
-        while self.advance_check(TokenType::Star)
-            || self.advance_check(TokenType::Slash)
-            || self.advance_check(TokenType::StarEqual)
-            || self.advance_check(TokenType::SlashEqual)
+        while self.check(TokenType::Star)
+            || self.check(TokenType::Slash)
+            || self.check(TokenType::StarEqual)
+            || self.check(TokenType::SlashEqual)
         {
-            let operator = self.previous().clone().token_type;
+            let operator = self.advance().clone().token_type;
             let right = self.unary();
             expression = Expression::BinaryExpression {
                 left: Box::new(expression),
@@ -724,7 +726,6 @@ impl Parser {
 
     fn dot_access(&mut self) -> Expression {
         let mut expression = self.index_access();
-        println!("Dot access {:?}", expression);
 
         while self.advance_check(TokenType::Dot) {
             let property = self.index_access();
@@ -856,12 +857,9 @@ impl Parser {
         // Array literal
         // println!("Start array expression");
         if self.advance_check(TokenType::LeftBracket) {
-            println!("Start array expression {:?}", self.peek());
             let mut elements = Vec::new();
             while !self.advance_check(TokenType::RightBracket) {
-                println!("Try Consume {:?}", self.peek());
                 elements.push(self.expression());
-                println!("Post Consume {:?}", self.peek());
                 if self.advance_check(TokenType::RightBracket) {
                     break;
                 }
@@ -896,7 +894,6 @@ impl Parser {
 
         // Lambda expression
         if self.advance_check(TokenType::LeftParen) {
-            println!("Trying lambda expression");
             if (self.check(TokenType::Identifier)
                 && (self.check_next(TokenType::Comma) || self.check_next(TokenType::RightParen)))
                 || self.check(TokenType::RightParen)
