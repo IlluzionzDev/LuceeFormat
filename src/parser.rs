@@ -133,7 +133,7 @@ impl<'a> Parser<'a> {
 
         // Custom lucee function
         if self.check(TokenType::Identifier)
-            && (self.check_next(TokenType::LeftBrace) || self.check_next(TokenType::Identifier))
+            && (self.check_next(TokenType::LeftBrace) || self.check_next(TokenType::Identifier) || self.check_next(TokenType::Semicolon))
         {
             return self.lucee_function();
         }
@@ -191,6 +191,13 @@ impl<'a> Parser<'a> {
                 },
                 right: Box::new(Expression::Literal(Literal::Number(1.0))),
             });
+        }
+
+        match expression {
+            Expression::None => {
+                self.error("Invalid expression");
+            }
+            _ => {}
         }
 
         Statement::ExpressionStmt(expression)
@@ -349,13 +356,16 @@ impl<'a> Parser<'a> {
 
         let attributes = self.attribute_definitions();
 
-        let body = self.consume_statement_block(true);
+        let mut body = None;
+        if !self.check(TokenType::Semicolon) {
+            body = Some(self.consume_statement_block(true));
+        }
 
         self.advance_check(TokenType::Semicolon);
 
         Statement::LuceeFunction {
             attributes,
-            body: Some(body),
+            body
         }
     }
 

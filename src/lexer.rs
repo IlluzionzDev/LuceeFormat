@@ -285,24 +285,6 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '=' => {
-                    // match
-                    // let match_char = self.peek();
-                    // return match match_char {
-                    //     '=' => {
-                    //         self.current += 1;
-                    //         self.column += 1;
-                    //         self.add_token(TokenType::EqualEqual)
-                    //     }
-                    //     '>' => {
-                    //         self.current += 1;
-                    //         self.column += 1;
-                    //         self.add_token(TokenType::Lambda)
-                    //     }
-                    //     _ => {
-                    //         self.add_token(TokenType::Equal)
-                    //     }
-                    // };
-
                     return if self.match_char('>') {
                         self.add_token(TokenType::Lambda)
                     } else if self.match_char('=') {

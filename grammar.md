@@ -72,7 +72,8 @@
 // or
 // lock name="myLock" type="exclusive" timeout="10" {
 // }
-<lucee_function> ::= <identifier> <loop_attribute_list>? "{" <statement_list> "}"
+// Should also cover stuff like abort;
+<lucee_function> ::= <identifier> <loop_attribute_list>? "{" <statement_list> "}" ";"?
 
 <component_definition> ::= "component" <loop_attribute_list>? "{" <statement_list> "}"
 
