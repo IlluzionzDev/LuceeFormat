@@ -21,7 +21,7 @@ pub enum Statement {
     FunctionDefinition(FunctionDefinition),
     ComponentDefinition(ComponentDefinition),
     LuceeFunction {
-        attributes: HashMap<String, Expression>,
+        attributes: Vec<(String, Expression)>,
         body: Option<Vec<Statement>>,
     },
     ControlStructure(ControlStructure),
@@ -38,7 +38,7 @@ pub enum Expression {
     },
     ObjectCreation(Box<Expression>),
     ArrayExpression(Vec<Expression>),
-    StructExpression(HashMap<String, Expression>),
+    StructExpression(Vec<(String, Expression)>),
     LambdaExpression {
         parameters: Vec<String>,
         body: Vec<Statement>,
@@ -126,7 +126,7 @@ pub struct FunctionDefinition {
 
 #[derive(Debug, Clone)]
 pub struct ComponentDefinition {
-    pub attributes: HashMap<String, Expression>,
+    pub attributes: Vec<(String, Expression)>,
     pub body: Vec<Statement>,
 }
 
@@ -214,7 +214,7 @@ pub enum CfmlTag {
     },
     GeneralCfmlTag {
         name: String,
-        attributes: HashMap<String, Expression>,
+        attributes: Vec<(String, Expression)>,
         body: Vec<Statement>,
     },
 }

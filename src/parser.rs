@@ -379,15 +379,15 @@ impl<'a> Parser<'a> {
         Statement::ComponentDefinition(ComponentDefinition { attributes, body })
     }
 
-    fn attribute_definitions(&mut self) -> HashMap<String, Expression> {
-        let mut attributes = HashMap::new();
+    fn attribute_definitions(&mut self) -> Vec<(String, Expression)> {
+        let mut attributes = Vec::new();
 
         while self.check(TokenType::Identifier) {
             let identifier = self.advance();
             let name = String::from(identifier.lexeme);
             self.consume(TokenType::Equal, "Expected assignment operator '='");
             let value = self.expression();
-            attributes.insert(name, value);
+            attributes.push((name, value));
         }
 
         attributes
@@ -880,7 +880,7 @@ impl<'a> Parser<'a> {
 
         // Struct literal
         if self.advance_check(TokenType::LeftBrace) {
-            let mut elements = HashMap::new();
+            let mut elements = Vec::new();
             while !self.advance_check(TokenType::RightBrace) {
                 // Key is identifier or String
                 let mut key = String::from("");
@@ -893,7 +893,7 @@ impl<'a> Parser<'a> {
                     self.error("Struct keys can be assigned with ':' or '='");
                 }
                 let value = self.expression();
-                elements.insert(key, value);
+                elements.push((key, value));
                 if self.advance_check(TokenType::RightBrace) {
                     break;
                 }
