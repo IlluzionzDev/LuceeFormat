@@ -13,7 +13,7 @@ fn main() {
     let mut parser = parser::Parser::new(&*source);
     let statements = parser.parse();
 
-    let end = start.elapsed().as_millis();
+    let end = start.elapsed().as_micros();
     
     // Print out the statements
     // for statement in statements {
@@ -21,5 +21,5 @@ fn main() {
     // }
 
     // Print out the time taken
-    println!("Time taken: {}ms", end);
+    println!("Time taken: {}us", end);
 }

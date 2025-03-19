@@ -1,8 +1,7 @@
-use std::collections::HashMap;
 use phf::phf_map;
+use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Clone)]
-#[derive(Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     // Single-character tokens
     LeftParen,
@@ -124,62 +123,62 @@ pub(crate) struct Lexer<'a> {
 }
 
 static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
-            "if" => TokenType::If,
-            "else" => TokenType::Else,
-            "for" => TokenType::For,
-            "while" => TokenType::While,
-            "return" => TokenType::Return,
-            "function" => TokenType::Function,
-            "var" => TokenType::Var,
-            "new" => TokenType::New,
-            "true" => TokenType::True,
-            "false" => TokenType::False,
-            "null" => TokenType::Null,
-            "required" => TokenType::Required,
-            "component" => TokenType::Component,
-            "abstract" => TokenType::Abstract,
-            "break" => TokenType::Break,
-            "case" => TokenType::Case,
-            "catch" => TokenType::Catch,
-            "continue" => TokenType::Continue,
-            "contains" => TokenType::Contains,
-            "default" => TokenType::Default,
-            "do" => TokenType::Do,
-            "finally" => TokenType::Finally,
-            "final" => TokenType::Final,
-            "import" => TokenType::Import,
-            "imp" => TokenType::Imp,
-            "interface" => TokenType::Interface,
-            "switch" => TokenType::Switch,
-            "try" => TokenType::Try,
-            "public" => TokenType::Public,
-            "private" => TokenType::Private,
-            "protected" => TokenType::Protected,
-            "eqv" => TokenType::Eqv,
-            "EQV" => TokenType::Eqv,
-            "eq" => TokenType::Eq,
-            "EQ" => TokenType::Eq,
-            "gt" => TokenType::Gt,
-            "GT" => TokenType::Gt,
-            "gte" => TokenType::Gte,
-            "GTE" => TokenType::Gte,
-            "in" => TokenType::In,
-            "IN" => TokenType::In,
-            "lt" => TokenType::Lt,
-            "LT" => TokenType::Lt,
-            "lte" => TokenType::Lte,
-            "LTE" => TokenType::Lte,
-            "neq" => TokenType::Neq,
-            "NEQ" => TokenType::Neq,
-            "not" => TokenType::Not,
-            "NOT" => TokenType::Not,
-            "or" => TokenType::Or,
-            "OR" => TokenType::Or,
-            "and" => TokenType::And,
-            "AND" => TokenType::And,
-            "xor" => TokenType::Xor,
-            "XOR" => TokenType::Xor,
-        };
+    "if" => TokenType::If,
+    "else" => TokenType::Else,
+    "for" => TokenType::For,
+    "while" => TokenType::While,
+    "return" => TokenType::Return,
+    "function" => TokenType::Function,
+    "var" => TokenType::Var,
+    "new" => TokenType::New,
+    "true" => TokenType::True,
+    "false" => TokenType::False,
+    "null" => TokenType::Null,
+    "required" => TokenType::Required,
+    "component" => TokenType::Component,
+    "abstract" => TokenType::Abstract,
+    "break" => TokenType::Break,
+    "case" => TokenType::Case,
+    "catch" => TokenType::Catch,
+    "continue" => TokenType::Continue,
+    "contains" => TokenType::Contains,
+    "default" => TokenType::Default,
+    "do" => TokenType::Do,
+    "finally" => TokenType::Finally,
+    "final" => TokenType::Final,
+    "import" => TokenType::Import,
+    "imp" => TokenType::Imp,
+    "interface" => TokenType::Interface,
+    "switch" => TokenType::Switch,
+    "try" => TokenType::Try,
+    "public" => TokenType::Public,
+    "private" => TokenType::Private,
+    "protected" => TokenType::Protected,
+    "eqv" => TokenType::Eqv,
+    "EQV" => TokenType::Eqv,
+    "eq" => TokenType::Eq,
+    "EQ" => TokenType::Eq,
+    "gt" => TokenType::Gt,
+    "GT" => TokenType::Gt,
+    "gte" => TokenType::Gte,
+    "GTE" => TokenType::Gte,
+    "in" => TokenType::In,
+    "IN" => TokenType::In,
+    "lt" => TokenType::Lt,
+    "LT" => TokenType::Lt,
+    "lte" => TokenType::Lte,
+    "LTE" => TokenType::Lte,
+    "neq" => TokenType::Neq,
+    "NEQ" => TokenType::Neq,
+    "not" => TokenType::Not,
+    "NOT" => TokenType::Not,
+    "or" => TokenType::Or,
+    "OR" => TokenType::Or,
+    "and" => TokenType::And,
+    "AND" => TokenType::And,
+    "xor" => TokenType::Xor,
+    "XOR" => TokenType::Xor,
+};
 
 impl<'a> Lexer<'a> {
     pub fn new(source: &'a str) -> Lexer<'a> {
@@ -197,157 +196,177 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn scan_token(&mut self) -> Token<'a> {
-        self.start = self.current;
+        loop {
+            self.start = self.current;
 
-        if self.is_at_end() {
-            return Token {
-                token_type: TokenType::EOF,
-                lexeme: "",
-                line: self.line,
-                column: self.current as u32,
-            };
-        }
+            if self.is_at_end() {
+                return Token {
+                    token_type: TokenType::EOF,
+                    lexeme: "",
+                    line: self.line,
+                    column: self.current as u32,
+                };
+            }
 
-        let c = self.advance();
-        match c {
-            '(' => self.add_token(TokenType::LeftParen),
-            ')' => self.add_token(TokenType::RightParen),
-            '{' => self.add_token(TokenType::LeftBrace),
-            '}' => self.add_token(TokenType::RightBrace),
-            '[' => self.add_token(TokenType::LeftBracket),
-            ']' => self.add_token(TokenType::RightBracket),
-            '#' => self.add_token(TokenType::Hash),
-            ',' => self.add_token(TokenType::Comma),
-            '.' => self.add_token(TokenType::Dot),
-            ';' => self.add_token(TokenType::Semicolon),
-            '*' => {
-                if self.match_char('=') {
-                    self.add_token(TokenType::StarEqual)
-                } else {
-                    self.add_token(TokenType::Star)
-                }
-            }
-            '-' => {
-                if self.match_char('=') {
-                    self.add_token(TokenType::MinusEqual)
-                } else if self.match_char('-') {
-                    self.add_token(TokenType::MinusMinus)
-                } else {
-                    self.add_token(TokenType::Minus)
-                }
-            }
-            '+' => {
-                if self.match_char('=') {
-                    self.add_token(TokenType::PlusEqual)
-                } else if self.match_char('+') {
-                    self.add_token(TokenType::PlusPlus)
-                } else {
-                    self.add_token(TokenType::Plus)
-                }
-            }
-            ':' => {
-                if self.match_char(':') {
-                    self.add_token(TokenType::ColonColon)
-                } else {
-                    self.add_token(TokenType::Colon)
-                }
-            }
-            '?' => {
-                if self.match_char(':') {
-                    self.add_token(TokenType::QuestionColon)
-                } else if self.match_char('.') {
-                    self.add_token(TokenType::QuestionDot)
-                } else {
-                    self.add_token(TokenType::Question)
-                }
-            }
-            '&' => {
-                if self.match_char('=') {
-                    self.add_token(TokenType::AmpersandEqual)
-                } else if self.match_char('&') {
-                    self.add_token(TokenType::AmpersandAmpersand)
-                } else {
-                    self.add_token(TokenType::Ampersand)
-                }
-            }
-            '|' => {
-                if self.match_char('|') {
-                    self.add_token(TokenType::PipePipe)
-                } else {
-                    self.add_token(TokenType::Pipe)
-                }
-            }
-            '!' => {
-                if self.match_char('=') {
-                    self.add_token(TokenType::BangEqual)
-                } else {
-                    self.add_token(TokenType::Bang)
-                }
-            }
-            '=' => {
-                if self.match_char('>') {
-                    self.add_token(TokenType::Lambda)
-                } else if self.match_char('=') {
-                    self.add_token(TokenType::EqualEqual)
-                } else {
-                    self.add_token(TokenType::Equal)
-                }
-            }
-            '<' => {
-                if self.match_char('=') {
-                    self.add_token(TokenType::LessEqual)
-                } else {
-                    self.add_token(TokenType::Less)
-                }
-            }
-            '>' => {
-                if self.match_char('=') {
-                    self.add_token(TokenType::GreaterEqual)
-                } else {
-                    self.add_token(TokenType::Greater)
-                }
-            }
-            '/' => {
-                if self.match_char('=') {
-                    self.add_token(TokenType::SlashEqual)
-                } else if self.match_char('/') {
-                    while self.peek() != '\n' && !self.is_at_end() {
-                        self.advance();
+            let c = self.advance();
+            match c {
+                '(' => return self.add_token(TokenType::LeftParen),
+                ')' => return self.add_token(TokenType::RightParen),
+                '{' => return self.add_token(TokenType::LeftBrace),
+                '}' => return self.add_token(TokenType::RightBrace),
+                '[' => return self.add_token(TokenType::LeftBracket),
+                ']' => return self.add_token(TokenType::RightBracket),
+                '#' => return self.add_token(TokenType::Hash),
+                ',' => return self.add_token(TokenType::Comma),
+                '.' => return self.add_token(TokenType::Dot),
+                ';' => return self.add_token(TokenType::Semicolon),
+                '*' => {
+                    return if self.match_char('=') {
+                        self.add_token(TokenType::StarEqual)
+                    } else {
+                        self.add_token(TokenType::Star)
                     }
-                    self.scan_token()
-                    // self.add_token(TokenType::Comment);
-                } else if self.match_char('*') {
-                    while (self.peek() != '*' || self.peek_next() != '/') && !self.is_at_end() {
-                        if self.peek() == '\n' {
-                            self.line += 1;
-                            self.column = 0;
+                }
+                '-' => {
+                    return if self.match_char('=') {
+                        self.add_token(TokenType::MinusEqual)
+                    } else if self.match_char('-') {
+                        self.add_token(TokenType::MinusMinus)
+                    } else {
+                        self.add_token(TokenType::Minus)
+                    }
+                }
+                '+' => {
+                    return if self.match_char('=') {
+                        self.add_token(TokenType::PlusEqual)
+                    } else if self.match_char('+') {
+                        self.add_token(TokenType::PlusPlus)
+                    } else {
+                        self.add_token(TokenType::Plus)
+                    }
+                }
+                ':' => {
+                    return if self.match_char(':') {
+                        self.add_token(TokenType::ColonColon)
+                    } else {
+                        self.add_token(TokenType::Colon)
+                    }
+                }
+                '?' => {
+                    return if self.match_char(':') {
+                        self.add_token(TokenType::QuestionColon)
+                    } else if self.match_char('.') {
+                        self.add_token(TokenType::QuestionDot)
+                    } else {
+                        self.add_token(TokenType::Question)
+                    }
+                }
+                '&' => {
+                    return if self.match_char('=') {
+                        self.add_token(TokenType::AmpersandEqual)
+                    } else if self.match_char('&') {
+                        self.add_token(TokenType::AmpersandAmpersand)
+                    } else {
+                        self.add_token(TokenType::Ampersand)
+                    }
+                }
+                '|' => {
+                    return if self.match_char('|') {
+                        self.add_token(TokenType::PipePipe)
+                    } else {
+                        self.add_token(TokenType::Pipe)
+                    }
+                }
+                '!' => {
+                    return if self.match_char('=') {
+                        self.add_token(TokenType::BangEqual)
+                    } else {
+                        self.add_token(TokenType::Bang)
+                    }
+                }
+                '=' => {
+                    // match
+                    // let match_char = self.peek();
+                    // return match match_char {
+                    //     '=' => {
+                    //         self.current += 1;
+                    //         self.column += 1;
+                    //         self.add_token(TokenType::EqualEqual)
+                    //     }
+                    //     '>' => {
+                    //         self.current += 1;
+                    //         self.column += 1;
+                    //         self.add_token(TokenType::Lambda)
+                    //     }
+                    //     _ => {
+                    //         self.add_token(TokenType::Equal)
+                    //     }
+                    // };
+
+                    return if self.match_char('>') {
+                        self.add_token(TokenType::Lambda)
+                    } else if self.match_char('=') {
+                        self.add_token(TokenType::EqualEqual)
+                    } else {
+                        self.add_token(TokenType::Equal)
+                    }
+                }
+                '<' => {
+                    return if self.match_char('=') {
+                        self.add_token(TokenType::LessEqual)
+                    } else {
+                        self.add_token(TokenType::Less)
+                    }
+                }
+                '>' => {
+                    return if self.match_char('=') {
+                        self.add_token(TokenType::GreaterEqual)
+                    } else {
+                        self.add_token(TokenType::Greater)
+                    }
+                }
+                '/' => {
+                    if self.match_char('=') {
+                        return self.add_token(TokenType::SlashEqual);
+                    } else if self.match_char('/') {
+                        while self.peek() != '\n' && !self.is_at_end() {
+                            self.advance();
+                        }
+                        continue;
+                        // self.add_token(TokenType::Comment);
+                    } else if self.match_char('*') {
+                        while (self.peek() != '*' || self.peek_next() != '/') && !self.is_at_end() {
+                            if self.peek() == '\n' {
+                                self.line += 1;
+                                self.column = 0;
+                            }
+                            self.advance();
                         }
                         self.advance();
+                        self.advance();
+                        continue;
+                        // self.add_token(TokenType::Comment);
+                    } else {
+                        return self.add_token(TokenType::Slash);
                     }
-                    self.advance();
-                    self.advance();
-                    self.scan_token()
-                    // self.add_token(TokenType::Comment);
-                } else {
-                    self.add_token(TokenType::Slash)
                 }
-            }
-            '"' | '\'' => self.string(),
-            '0'..='9' => self.number(),
-            'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
-            ' ' | '\r' | '\t' => self.scan_token(),
-            '\n' => {
-                // self.add_token(TokenType::NewLine);
-                self.line += 1;
-                self.column = 0;
-                self.scan_token()
-            }
-            _ => panic!(
-                "Unexpected character {0} at {1}:{2}",
-                self.source[self.start..self.current].to_string(),
-                self.line,
-                self.column
-            ),
+                '"' | '\'' => return self.string(),
+                '0'..='9' => return self.number(),
+                'a'..='z' | 'A'..='Z' | '_' => return self.identifier(),
+                ' ' | '\r' | '\t' => continue,
+                '\n' => {
+                    // self.add_token(TokenType::NewLine);
+                    self.line += 1;
+                    self.column = 0;
+                    continue;
+                }
+                _ => panic!(
+                    "Unexpected character {0} at {1}:{2}",
+                    self.source[self.start..self.current].to_string(),
+                    self.line,
+                    self.column
+                ),
+            };
         }
     }
 
@@ -356,14 +375,18 @@ impl<'a> Lexer<'a> {
             self.advance();
         }
 
-        let text = &self.source[self.start..self.current].to_string();
+        let text = &self.source[self.start..self.current];
         let token_type = KEYWORDS.get(text).copied().unwrap_or(TokenType::Identifier);
 
         self.add_token(token_type)
     }
 
     fn string(&mut self) -> Token<'a> {
-        let quote = self.source.chars().nth(self.start).unwrap();
+        let quote = self
+            .source
+            .as_bytes()
+            .get(self.start)
+            .map_or('\0', |&b| b as char);
 
         // Strings have some special properties in lucee, if you use a raw '#" inside
         // a string, it allows you to define code in place until encountering another #"
@@ -409,11 +432,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn match_char(&mut self, expected: char) -> bool {
-        if self.is_at_end() {
-            return false;
-        }
-
-        if self.source.chars().nth(self.current).unwrap() != expected {
+        if self.is_at_end() || self.peek() != expected {
             return false;
         }
 
@@ -423,15 +442,21 @@ impl<'a> Lexer<'a> {
     }
 
     fn peek(&self) -> char {
-        self.source.as_bytes().get(self.current).map_or('\0', |&b| b as char)
+        self.source
+            .as_bytes()
+            .get(self.current)
+            .map_or('\0', |&b| b as char)
     }
 
     fn peek_next(&self) -> char {
-        self.source.as_bytes().get(self.current + 1).map_or('\0', |&b| b as char)
+        self.source
+            .as_bytes()
+            .get(self.current + 1)
+            .map_or('\0', |&b| b as char)
     }
 
     fn advance(&mut self) -> char {
-        let ch = self.source.as_bytes()[self.current] as char;
+        let ch = self.peek();
         self.current += 1;
         self.column += 1;
         ch
@@ -443,11 +468,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn add_token_full(&mut self, token_type: TokenType, literal: &'a str) -> Token<'a> {
-         Token {
+        Token {
             token_type,
             lexeme: literal,
             line: self.line,
-            column: self.column as u32,
+            column: self.column,
         }
     }
 }

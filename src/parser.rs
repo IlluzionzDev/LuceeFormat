@@ -25,31 +25,33 @@ impl<'a> Parser<'a> {
         let mut lexer = Lexer::new(source);
         let current = lexer.scan_token();
         let ahead = lexer.scan_token();
-        Parser { lexer, current, ahead, behind: Token { token_type: TokenType::EOF, line:0, column:0, lexeme: "" }}
+        Parser {
+            lexer,
+            current,
+            ahead,
+            behind: Token {
+                token_type: TokenType::EOF,
+                line: 0,
+                column: 0,
+                lexeme: "",
+            },
+        }
     }
 
     fn check(&self, token_type: TokenType) -> bool {
-        if self.is_at_end() {
-            false
-        } else {
-            self.peek().token_type == token_type
-        }
+        !self.is_at_end() && self.peek().token_type == token_type
     }
 
     fn check_next(&self, token_type: TokenType) -> bool {
-        if self.is_at_end() {
-            false
-        } else {
-            self.peek_next().token_type == token_type
-        }
+        !self.is_at_end() && self.peek_next().token_type == token_type
     }
 
     fn advance(&mut self) -> &Token<'a> {
         self.behind = std::mem::replace(&mut self.current, self.ahead.clone());
         if !self.is_at_end() {
-            // let start = std::time::Instant::now();
+            let start = std::time::Instant::now();
             self.ahead = self.lexer.scan_token();
-            // println!("Advance took: {}us", start.elapsed().as_micros());
+            // println!("Advance took: {0}ns for {1:?}", start.elapsed().as_nanos(), self.ahead);
         }
 
         &self.behind
@@ -237,17 +239,21 @@ impl<'a> Parser<'a> {
     }
 
     fn function_definition(&mut self) -> Statement {
-        let mut access_modifier = None;
-        if self.check(TokenType::Public) {
-            access_modifier = Some(AccessModifier::Public);
-            self.advance();
-        } else if self.check(TokenType::Private) {
-            access_modifier = Some(AccessModifier::Private);
-            self.advance();
-        } else if self.check(TokenType::Protected) {
-            access_modifier = Some(AccessModifier::Protected);
-            self.advance();
-        }
+        let access_modifier = match self.peek().token_type {
+            TokenType::Public => {
+                self.advance();
+                Some(AccessModifier::Public)
+            }
+            TokenType::Private => {
+                self.advance();
+                Some(AccessModifier::Private)
+            }
+            TokenType::Protected => {
+                self.advance();
+                Some(AccessModifier::Protected)
+            }
+            _ => None,
+        };
 
         let mut return_type = None;
         if self.check(TokenType::Identifier) {
@@ -256,9 +262,10 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Function, "Expected 'function' keyword");
 
-        let name = String::from(self
-            .consume(TokenType::Identifier, "Expected function name")
-            .lexeme);
+        let name = String::from(
+            self.consume(TokenType::Identifier, "Expected function name")
+                .lexeme,
+        );
 
         self.consume(TokenType::LeftParen, "Expected '('");
         let mut parameters = Vec::new();
@@ -301,15 +308,16 @@ impl<'a> Parser<'a> {
         // Defining return type
         let mut param_type = None;
         if self.check(TokenType::Identifier) && self.check_next(TokenType::Identifier) {
-            param_type = Some(
-                String::from(self.consume(TokenType::Identifier, "Expected parameter type")
-                    .lexeme)
-            );
+            param_type = Some(String::from(
+                self.consume(TokenType::Identifier, "Expected parameter type")
+                    .lexeme,
+            ));
         }
 
-        let name = String::from(self
-            .consume(TokenType::Identifier, "Expected parameter name")
-            .lexeme);
+        let name = String::from(
+            self.consume(TokenType::Identifier, "Expected parameter name")
+                .lexeme,
+        );
 
         let mut default_value = None;
         if self.advance_check(TokenType::Equal) {
@@ -412,9 +420,10 @@ impl<'a> Parser<'a> {
         self.advance_check(TokenType::Var);
 
         // Consume identifier, if next keyword is in, is a for in loop
-        let name = String::from(self
-            .consume(TokenType::Identifier, "Expected identifier")
-            .lexeme);
+        let name = String::from(
+            self.consume(TokenType::Identifier, "Expected identifier")
+                .lexeme,
+        );
 
         if self.check(TokenType::In) {
             self.consume(TokenType::In, "Expected 'in' keyword");
@@ -907,10 +916,10 @@ impl<'a> Parser<'a> {
         let mut parameters = Vec::new();
 
         while !self.check(TokenType::Lambda) && !self.check(TokenType::RightParen) {
-            parameters.push(
-                String::from(self.consume(TokenType::Identifier, "Expected identifier")
-                    .lexeme)
-            );
+            parameters.push(String::from(
+                self.consume(TokenType::Identifier, "Expected identifier")
+                    .lexeme,
+            ));
             if self.advance_check(TokenType::RightParen) || self.advance_check(TokenType::Lambda) {
                 break;
             }
