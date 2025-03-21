@@ -28,6 +28,7 @@ pub enum TokenType {
     GreaterEqual,
     Less,
     LessEqual,
+    LessSlash,
     Ampersand,
     AmpersandEqual,
     AmpersandAmpersand,
@@ -114,7 +115,7 @@ pub struct Token<'a> {
 }
 
 pub(crate) struct Lexer<'a> {
-    source: &'a str,
+    pub source: &'a str,
 
     start: usize,
     current: usize,
@@ -296,6 +297,8 @@ impl<'a> Lexer<'a> {
                 '<' => {
                     return if self.match_char('=') {
                         self.add_token(TokenType::LessEqual)
+                    } else if self.match_char('/') {
+                        self.add_token(TokenType::LessSlash)
                     } else {
                         self.add_token(TokenType::Less)
                     }

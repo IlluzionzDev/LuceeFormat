@@ -1,72 +1,133 @@
 use crate::lexer::Token;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
-pub enum Program {
-    Statements(Vec<Statement>),
+pub struct AST {
+    pub source: Rc<String>,
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    ExpressionStmt(Expression),
-    VariableDeclaration {
-        name: String,
-        value: Expression,
-    },
-    VariableAssignment {
-        name: Expression,
-        value: Expression,
-    },
-    ReturnStatement(Option<Expression>),
-    FunctionDefinition(FunctionDefinition),
-    ComponentDefinition(ComponentDefinition),
-    LuceeFunction {
-        attributes: Vec<(String, Expression)>,
-        body: Option<Vec<Statement>>,
-    },
-    ControlStructure(ControlStructure),
-    CfmlTag(CfmlTag),
+    ExpressionStmt(Rc<Expression>),
+    VariableDeclaration(Rc<VariableDeclaration>),
+    VariableAssignment(Rc<VariableAssignment>),
+    ReturnStatement(Rc<ReturnStatement>),
+    FunctionDefinition(Rc<FunctionDefinition>),
+    ComponentDefinition(Rc<ComponentDefinition>),
+    LuceeFunction(Rc<LuceeFunction>),
+    IfStatement(Rc<IfStatement>),
+    ForStatement(Rc<ForStatement>),
+    WhileStatement(Rc<WhileStatement>),
+    SwitchStatement(Rc<SwitchStatement>),
+    TryCatchStatement(Rc<TryCatchStatement>),
+    CfmlTag(Rc<CfmlTag>),
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableDeclaration {
+    pub name: String,
+    pub value: Expression,
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableAssignment {
+    pub name: Expression,
+    pub value: Expression,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReturnStatement {
+    pub value: Option<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LuceeFunction {
+    pub attributes: Vec<(String, Expression)>,
+    pub body: Option<Vec<Statement>>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    Literal(Literal),
-    Identifier(String),
-    FunctionCall {
-        name: String,
-        args: Vec<(Option<String>, Expression)>,
-    },
-    ObjectCreation(Box<Expression>),
-    ArrayExpression(Vec<Expression>),
-    StructExpression(Vec<(String, Expression)>),
-    LambdaExpression {
-        parameters: Vec<String>,
-        body: Vec<Statement>,
-    },
-    BinaryExpression {
-        left: Box<Expression>,
-        op: BinaryOperator,
-        right: Box<Expression>,
-    },
-    UnaryExpression {
-        op: UnaryOperator,
-        expr: Box<Expression>,
-    },
-    TernaryExpression {
-        condition: Box<Expression>,
-        true_expr: Box<Expression>,
-        false_expr: Box<Expression>,
-    },
-    GroupExpression(Box<Expression>),
-    MemberAccess {
-        object: Box<Expression>,
-        property: Box<Expression>,
-    },
-    IndexAccess {
-        object: Box<Expression>,
-        index: Box<Expression>,
-    },
+    Literal(Rc<Literal>),
+    Identifier(Rc<String>),
+    FunctionCall(Rc<FunctionCall>),
+    ObjectCreation(Rc<ObjectCreation>),
+    ArrayExpression(Rc<ArrayExpression>),
+    StructExpression(Rc<StructExpression>),
+    LambdaExpression(Rc<LambdaExpression>),
+    BinaryExpression(Rc<BinaryExpression>),
+    UnaryExpression(Rc<UnaryExpression>),
+    TernaryExpression(Rc<TernaryExpression>),
+    GroupExpression(Rc<GroupExpression>),
+    MemberAccess(Rc<MemberAccess>),
+    IndexAccess(Rc<IndexAccess>),
     None, // Trying to consume expression but there is none. Represented by blank space
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionCall {
+    pub name: String,
+    pub args: Vec<(Option<String>, Expression)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ObjectCreation {
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayExpression {
+    pub elements: Vec<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructExpression {
+    pub elements: Vec<(String, Expression)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LambdaExpression {
+    pub parameters: Vec<String>,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BinaryExpression {
+    pub left: Box<Expression>,
+    pub op: BinaryOperator,
+    pub right: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnaryExpression {
+    pub op: UnaryOperator,
+    pub expr: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TernaryExpression {
+    pub condition: Box<Expression>,
+    pub true_expr: Box<Expression>,
+    pub false_expr: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupExpression {
+    pub expr: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MemberAccess {
+    pub object: Box<Expression>,
+    pub property: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IndexAccess {
+    pub object: Box<Expression>,
+    pub index: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
@@ -146,38 +207,37 @@ pub struct Parameter {
 }
 
 #[derive(Debug, Clone)]
-pub enum ControlStructure {
-    IfStatement {
-        condition: Expression,
-        body: Vec<Statement>,
-        else_body: Option<Vec<Statement>>,
-    },
-    LoopStatement(LoopStatement),
-    SwitchStatement {
-        expression: Expression,
-        cases: Vec<CaseStatement>,
-    },
-    TryCatchStatement {
-        try_body: Vec<Statement>,
-        catch_var: String,
-        catch_body: Vec<Statement>,
-    },
+pub struct IfStatement {
+    pub condition: Expression,
+    pub body: Vec<Statement>,
+    // Potentially contains another if statement
+    pub else_body: Option<Vec<Statement>>,
 }
 
 #[derive(Debug, Clone)]
-pub enum LoopStatement {
-    For {
-        control: ForControl,
-        body: Vec<Statement>,
-    },
-    While {
-        condition: Expression,
-        body: Vec<Statement>,
-    },
-    DoWhile {
-        body: Vec<Statement>,
-        condition: Expression,
-    },
+pub struct ForStatement {
+    pub control: ForControl,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WhileStatement {
+    pub do_while: bool, // If is in form do { } while (condition), otherwise while (condition) { }
+    pub condition: Expression,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SwitchStatement {
+    pub expression: Expression,
+    pub cases: Vec<CaseStatement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TryCatchStatement {
+    pub try_body: Vec<Statement>,
+    pub catch_var: String,
+    pub catch_body: Vec<Statement>,
 }
 
 // Used to determine if For loop is traditional var i = 0, or for (i in array)
@@ -203,20 +263,36 @@ pub struct CaseStatement {
 
 #[derive(Debug, Clone)]
 pub enum CfmlTag {
-    CfSet {
-        name: String,
-        value: Expression,
-    },
-    CfIf {
-        condition: Expression,
-        body: Vec<Statement>,
-        else_body: Option<Vec<Statement>>,
-    },
-    GeneralCfmlTag {
-        name: String,
-        attributes: Vec<(String, Expression)>,
-        body: Vec<Statement>,
-    },
+    CfSet(Rc<CfSet>),
+    CfIf(Rc<CfIf>),
+    CfQuery(Rc<CfQuery>),
+    GeneralCfmlTag(Rc<GeneralCfmlTag>),
+}
+
+#[derive(Debug, Clone)]
+pub struct CfSet {
+    pub name: String,
+    pub value: Expression,
+}
+
+#[derive(Debug, Clone)]
+pub struct CfIf {
+    pub condition: Expression,
+    pub body: Vec<Statement>,
+    pub else_if_blocks: Vec<(Expression, Vec<Statement>)>,
+    pub else_body: Option<Vec<Statement>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CfQuery {
+    query: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct GeneralCfmlTag {
+    pub name: String,
+    pub attributes: Vec<(String, Expression)>,
+    pub body: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
