@@ -7,7 +7,6 @@
               | <function_definition>
               | <component_definition>
               | <control_structure>
-              | <cfml_tag>
               | <expression_statement>
               | <return_statement>
 
@@ -113,16 +112,6 @@
 <try_catch_statement> ::= "try" "{" <statement_list> "}" "catch" "(" <identifier> ")" "{" <statement_list> "}"
 
 <loop_attribute_list> ::= <identifier> "=" <expression> | <identifier> "=" <expression> " " <loop_attribute_list>
-
-# Special case cfml tags
-<cfml_tag> ::= "<cfset" <variable_declaration> ">"
-| "<cfif" <expression> ">" <statement_list> "<cfelse>" <statement_list> "<cfif>"
-| <general_cfml_tag>
-
-# TODO: Special cfml tags such as cfoutput and cfquery, treat inside tags
-# as raw text
-
-<general_cfml_tag> ::= "<cf" <identifier> (<expression> | <loop_attribute_list>) "/"? ">" <statement_list> ("</cf" <identifier> ">")?
 
 # Handle comments for formatting / linting
 <comment> ::= "/*" <comment_body> "*/" | "//" <comment_body> | "<!--" <comment_body> "-->"

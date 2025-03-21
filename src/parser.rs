@@ -179,11 +179,6 @@ impl<'a> Parser<'a> {
             return self.try_catch_statement();
         }
 
-        // CfmlTag
-        if self.check(TokenType::Less) && self.check_next(TokenType::Identifier) {
-            return self.cfml_tag();
-        }
-
         // Expression Statement
         let expression = self.expression();
 
@@ -600,96 +595,6 @@ impl<'a> Parser<'a> {
             try_body,
             catch_var,
             catch_body,
-        }))
-    }
-
-    fn cfml_tag(&mut self) -> Statement {
-        self.consume(TokenType::Less, "Expected '<'");
-
-        // Name of tag
-        let name = String::from(
-            self.consume(TokenType::Identifier, "Expected tag name")
-                .lexeme,
-        );
-
-        // Special cfml tags for parsing
-        if name.eq("cfset") {
-            self.advance_check(TokenType::Var);
-            let name = String::from(
-                self.consume(TokenType::Identifier, "Expected variable name")
-                    .lexeme,
-            );
-            self.consume(TokenType::Equal, "Expected '='");
-            let value = self.expression();
-            self.consume(TokenType::Greater, "Expected '>'"); // End of tag
-            return Statement::CfmlTag(Rc::new(CfmlTag::CfSet(Rc::new(CfSet { name, value }))));
-        } else if name.eq("cfif") {
-            let condition = self.expression();
-            self.consume(TokenType::Greater, "Expected '>'"); // End of cfif tag
-
-            let mut body = Vec::new();
-            let mut else_body = None;
-            let mut else_if_blocks = Vec::new();
-
-            // Parse cfif body
-            while !self.check(TokenType::LessSlash) {
-                if self.check(TokenType::Less) && self.check_next(TokenType::Identifier) {
-                    // Look ahead to detect cfelseif/cfelse
-                    self.advance(); // Consume '<'
-                    let tag_name = self
-                        .consume(TokenType::Identifier, "Expected tag name")
-                        .lexeme;
-
-                    if tag_name == "cfelseif" {
-                        let else_if_condition = self.expression();
-                        self.consume(TokenType::Greater, "Expected '>'");
-
-                        let mut else_if_body = Vec::new();
-                        while !self.check(TokenType::LessSlash)
-                            && !self.peek().lexeme.eq("cfelseif")
-                            && !self.peek().lexeme.eq("cfelse")
-                        {
-                            else_if_body.push(self.statement());
-                        }
-
-                        else_if_blocks.push((else_if_condition, else_if_body));
-                    } else if tag_name == "cfelse" {
-                        self.consume(TokenType::Greater, "Expected '>'");
-                        let mut else_body_statements = Vec::new();
-
-                        while !self.check(TokenType::LessSlash) {
-                            else_body_statements.push(self.statement());
-                        }
-
-                        else_body = Some(else_body_statements);
-                        break;
-                    } else {
-                        self.error("Unexpected CFML tag inside <cfif>");
-                    }
-                } else {
-                    body.push(self.statement());
-                }
-            }
-
-            self.consume(TokenType::LessSlash, "Expected '>'");
-            self.consume(TokenType::Identifier, "Expected tag name");
-            self.consume(TokenType::Greater, "Expected '>'");
-
-            return Statement::CfmlTag(Rc::new(CfmlTag::CfIf(Rc::new(CfIf {
-                condition,
-                body,
-                else_if_blocks,
-                else_body,
-            }))));
-        } else if name.eq("cfquery") {
-        } else {
-            self.error("Invalid CFML tag");
-        }
-
-        // TODO
-        Statement::VariableDeclaration(Rc::new(VariableDeclaration {
-            name: String::from(""),
-            value: Expression::Literal(Rc::new(Literal::Null)),
         }))
     }
 
