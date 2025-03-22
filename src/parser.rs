@@ -1,20 +1,22 @@
 use crate::ast::Expression::Literal as ExpLiteral;
 use crate::ast::{
-    AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement, CfIf, CfSet,
-    CfmlTag, ComponentDefinition, Expression, ForControl, ForStatement, FunctionCall,
-    FunctionDefinition, GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal,
-    LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement, Statement,
-    StructExpression, SwitchStatement, TernaryExpression, TryCatchStatement, UnaryExpression,
-    UnaryOperator, VariableAssignment, VariableDeclaration, WhileStatement, AST,
+    AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement,
+    ComponentDefinition, Expression, ForControl, ForStatement, FunctionCall, FunctionDefinition,
+    GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal, LuceeFunction,
+    MemberAccess, ObjectCreation, Parameter, ReturnStatement, Statement, StructExpression,
+    SwitchStatement, TernaryExpression, TryCatchStatement, UnaryExpression, UnaryOperator,
+    VariableAssignment, VariableDeclaration, WhileStatement, AST,
 };
-use crate::lexer::{Lexer, Token, TokenType};
+use crate::lexer::{Lexer, SourceSpan, Token, TokenType};
 use std::rc::Rc;
 
-pub struct Parser<'a> {
-    lexer: Lexer<'a>,
-    behind: Token<'a>,
-    current: Token<'a>,
-    ahead: Token<'a>,
+/// Parse a source string into an AST
+/// Lexs tokens one at a time as needed
+pub struct Parser<'ast> {
+    lexer: Lexer<'ast>,
+    behind: Token<'ast>,
+    current: Token<'ast>,
+    ahead: Token<'ast>,
 
     // DEBUG: Total time spent lexing while parsing, as micros
     pub lex_time: u128,
@@ -26,8 +28,8 @@ pub struct Parser<'a> {
 * in Lucee we can't define a function within a function. This Parser will parse that, but not validate
 * that it is correct
 */
-impl<'a> Parser<'a> {
-    pub fn new(source: &'a str) -> Parser<'a> {
+impl<'ast> Parser<'ast> {
+    pub fn new(source: &'ast str) -> Parser<'ast> {
         let mut lexer = Lexer::new(source);
         let current = lexer.scan_token();
         let ahead = lexer.scan_token();
@@ -39,7 +41,9 @@ impl<'a> Parser<'a> {
                 token_type: TokenType::EOF,
                 line: 0,
                 column: 0,
+                end_column: 0,
                 lexeme: "",
+                span: SourceSpan { start: 0, end: 0 },
             },
             lex_time: 0,
         }
@@ -53,7 +57,7 @@ impl<'a> Parser<'a> {
         !self.is_at_end() && self.peek_next().token_type == token_type
     }
 
-    fn advance(&mut self) -> &Token<'a> {
+    fn advance(&mut self) -> &Token<'ast> {
         self.behind = std::mem::replace(&mut self.current, self.ahead.clone());
         if !self.is_at_end() {
             let start = std::time::Instant::now();
@@ -78,7 +82,7 @@ impl<'a> Parser<'a> {
     }
 
     // Expect token and consume, otherwise error
-    fn consume(&mut self, token_type: TokenType, error: &str) -> &Token {
+    fn consume(&mut self, token_type: TokenType, error: &str) -> &Token<'ast> {
         // println!("Consume: {0:?}, {1:?}", self.peek(), token_type);
         if self.check(token_type) {
             return self.advance();
@@ -96,15 +100,15 @@ impl<'a> Parser<'a> {
         self.peek().token_type == TokenType::EOF
     }
 
-    fn peek(&self) -> &Token {
+    fn peek(&self) -> &Token<'ast> {
         &self.current
     }
 
-    fn peek_next(&self) -> &Token {
+    fn peek_next(&self) -> &Token<'ast> {
         &self.ahead
     }
 
-    pub fn parse(&mut self) -> AST {
+    pub fn parse(&mut self) -> AST<'ast> {
         let mut statements = Vec::new();
 
         while !self.is_at_end() {
@@ -117,7 +121,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn statement(&mut self) -> Statement {
+    fn statement(&mut self) -> Statement<'ast> {
         // Variable Declaration
         if self.check(TokenType::Var) {
             return self.variable_declaration();
@@ -219,7 +223,7 @@ impl<'a> Parser<'a> {
         Statement::ExpressionStmt(Rc::new(expression))
     }
 
-    fn variable_declaration(&mut self) -> Statement {
+    fn variable_declaration(&mut self) -> Statement<'ast> {
         if self.advance_check(TokenType::Var) {
             let identifier = self.consume(TokenType::Identifier, "Expected variable name");
             let name = String::from(identifier.lexeme);
@@ -232,7 +236,7 @@ impl<'a> Parser<'a> {
         panic!("Invalid variable declaration");
     }
 
-    fn consume_statement_block(&mut self, optional_braces: bool) -> Vec<Statement> {
+    fn consume_statement_block(&mut self, optional_braces: bool) -> Vec<Statement<'ast>> {
         let mut has_braces = false;
 
         // If { exists, consume multiple statements, otherwise only consume one
@@ -261,7 +265,7 @@ impl<'a> Parser<'a> {
         body
     }
 
-    fn function_definition(&mut self) -> Statement {
+    fn function_definition(&mut self) -> Statement<'ast> {
         let access_modifier = match self.peek().token_type {
             TokenType::Public => {
                 self.advance();
@@ -285,10 +289,9 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Function, "Expected 'function' keyword");
 
-        let name = String::from(
-            self.consume(TokenType::Identifier, "Expected function name")
-                .lexeme,
-        );
+        let name = self
+            .consume(TokenType::Identifier, "Expected function name")
+            .clone();
 
         self.consume(TokenType::LeftParen, "Expected '('");
         let mut parameters = Vec::new();
@@ -310,7 +313,7 @@ impl<'a> Parser<'a> {
     }
 
     // Consume parameter list of <required>? <type> <identifier> ("=" <expression>)?
-    fn parameters(&mut self) -> Vec<Parameter> {
+    fn parameters(&mut self) -> Vec<Parameter<'ast>> {
         let mut parameters = Vec::new();
 
         parameters.push(self.parameter());
@@ -322,7 +325,7 @@ impl<'a> Parser<'a> {
         parameters
     }
 
-    fn parameter(&mut self) -> Parameter {
+    fn parameter(&mut self) -> Parameter<'ast> {
         let mut required = false;
         if self.advance_check(TokenType::Required) {
             required = true;
@@ -367,7 +370,7 @@ impl<'a> Parser<'a> {
      *
      * "Calling" a function like a statement with an attribute list
      */
-    fn lucee_function(&mut self) -> Statement {
+    fn lucee_function(&mut self) -> Statement<'ast> {
         let identifier = self.consume(TokenType::Identifier, "Expected identifier");
 
         let attributes = self.attribute_definitions();
@@ -382,7 +385,7 @@ impl<'a> Parser<'a> {
         Statement::LuceeFunction(Rc::new(LuceeFunction { attributes, body }))
     }
 
-    fn component_definition(&mut self) -> Statement {
+    fn component_definition(&mut self) -> Statement<'ast> {
         self.consume(TokenType::Component, "Expected 'component' keyword");
 
         let attributes = self.attribute_definitions();
@@ -392,7 +395,7 @@ impl<'a> Parser<'a> {
         Statement::ComponentDefinition(Rc::new(ComponentDefinition { attributes, body }))
     }
 
-    fn attribute_definitions(&mut self) -> Vec<(String, Expression)> {
+    fn attribute_definitions(&mut self) -> Vec<(String, Expression<'ast>)> {
         let mut attributes = Vec::new();
 
         while self.check(TokenType::Identifier) {
@@ -406,7 +409,7 @@ impl<'a> Parser<'a> {
         attributes
     }
 
-    fn if_statement(&mut self) -> Statement {
+    fn if_statement(&mut self) -> Statement<'ast> {
         self.consume(TokenType::If, "Expected 'if' keyword");
         self.consume(TokenType::LeftParen, "Expected '('");
 
@@ -434,7 +437,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn for_statement(&mut self) -> Statement {
+    fn for_statement(&mut self) -> Statement<'ast> {
         self.consume(TokenType::For, "Expected 'for' keyword");
 
         self.consume(TokenType::LeftParen, "Expected '('");
@@ -480,7 +483,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn while_statement(&mut self) -> Statement {
+    fn while_statement(&mut self) -> Statement<'ast> {
         if self.advance_check(TokenType::While) {
             self.consume(TokenType::LeftParen, "Expected '('");
 
@@ -517,7 +520,7 @@ impl<'a> Parser<'a> {
         panic!("Expected 'while' or 'do' keyword")
     }
 
-    fn switch_statement(&mut self) -> Statement {
+    fn switch_statement(&mut self) -> Statement<'ast> {
         self.consume(TokenType::Switch, "Expected 'switch' keyword");
         self.consume(TokenType::LeftParen, "Expected '('");
         let expression = self.expression();
@@ -580,7 +583,7 @@ impl<'a> Parser<'a> {
         Statement::SwitchStatement(Rc::new(SwitchStatement { expression, cases }))
     }
 
-    fn try_catch_statement(&mut self) -> Statement {
+    fn try_catch_statement(&mut self) -> Statement<'ast> {
         self.consume(TokenType::Try, "Expected 'try' keyword");
         let try_body = self.consume_statement_block(true);
         self.consume(TokenType::Catch, "Expected 'catch' keyword");
@@ -598,11 +601,11 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn expression(&mut self) -> Expression {
+    fn expression(&mut self) -> Expression<'ast> {
         self.ternary()
     }
 
-    fn ternary(&mut self) -> Expression {
+    fn ternary(&mut self) -> Expression<'ast> {
         let mut expression = self.equality();
 
         if self.advance_check(TokenType::Question) {
@@ -619,7 +622,7 @@ impl<'a> Parser<'a> {
         expression
     }
 
-    fn equality(&mut self) -> Expression {
+    fn equality(&mut self) -> Expression<'ast> {
         let mut expression = self.comparison();
 
         while self.check(TokenType::EqualEqual)
@@ -645,7 +648,7 @@ impl<'a> Parser<'a> {
         expression
     }
 
-    fn comparison(&mut self) -> Expression {
+    fn comparison(&mut self) -> Expression<'ast> {
         let mut expression = self.term();
 
         while self.check(TokenType::Less)
@@ -687,7 +690,7 @@ impl<'a> Parser<'a> {
         expression
     }
 
-    fn term(&mut self) -> Expression {
+    fn term(&mut self) -> Expression<'ast> {
         let mut expression = self.factor();
 
         while self.check(TokenType::Plus)
@@ -717,7 +720,7 @@ impl<'a> Parser<'a> {
         expression
     }
 
-    fn factor(&mut self) -> Expression {
+    fn factor(&mut self) -> Expression<'ast> {
         let mut expression = self.unary();
 
         while self.check(TokenType::Star)
@@ -743,7 +746,7 @@ impl<'a> Parser<'a> {
         expression
     }
 
-    fn unary(&mut self) -> Expression {
+    fn unary(&mut self) -> Expression<'ast> {
         // Unary operator - or !
         if self.check(TokenType::Minus) || self.check(TokenType::Bang) {
             let operator = self.advance().token_type;
@@ -761,7 +764,7 @@ impl<'a> Parser<'a> {
         self.dot_access()
     }
 
-    fn dot_access(&mut self) -> Expression {
+    fn dot_access(&mut self) -> Expression<'ast> {
         let mut expression = self.index_access();
 
         while self.advance_check(TokenType::Dot) {
@@ -775,7 +778,7 @@ impl<'a> Parser<'a> {
         expression
     }
 
-    fn index_access(&mut self) -> Expression {
+    fn index_access(&mut self) -> Expression<'ast> {
         let mut expression = self.primary();
 
         while self.advance_check(TokenType::LeftBracket) {
@@ -790,7 +793,7 @@ impl<'a> Parser<'a> {
         expression
     }
 
-    fn primary(&mut self) -> Expression {
+    fn primary(&mut self) -> Expression<'ast> {
         // Literals
         if self.check(TokenType::String) {
             return ExpLiteral(Rc::new(Literal::String(String::from(
@@ -954,7 +957,7 @@ impl<'a> Parser<'a> {
         Expression::None
     }
 
-    fn lambda_expression(&mut self) -> Expression {
+    fn lambda_expression(&mut self) -> Expression<'ast> {
         // Consume params as comma separated identifiers
         let mut parameters = Vec::new();
 

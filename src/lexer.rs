@@ -106,12 +106,24 @@ pub enum TokenType {
     Comment,
 }
 
+/// Represents a literal token in the source code.
+/// Includes what type of token, the string literal from the source,
+/// and position data in the source
 #[derive(Debug, Clone)]
 pub struct Token<'a> {
     pub token_type: TokenType,
     pub lexeme: &'a str,
-    pub line: u32,
-    pub column: u32,
+    pub line: usize,
+    pub column: usize,
+    pub end_column: usize,
+    pub span: SourceSpan,
+}
+
+/// Represents absolute position data of a token
+#[derive(Debug, Clone)]
+pub struct SourceSpan {
+    pub start: usize,
+    pub end: usize,
 }
 
 pub(crate) struct Lexer<'a> {
@@ -119,8 +131,11 @@ pub(crate) struct Lexer<'a> {
 
     start: usize,
     current: usize,
-    line: u32,
-    column: u32,
+    line: usize,
+
+    // Represent current index in line
+    column: usize,
+    end_column: usize,
 }
 
 static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
@@ -189,6 +204,7 @@ impl<'a> Lexer<'a> {
             current: 0,
             line: 1,
             column: 0,
+            end_column: 0,
         }
     }
 
@@ -199,13 +215,19 @@ impl<'a> Lexer<'a> {
     pub fn scan_token(&mut self) -> Token<'a> {
         loop {
             self.start = self.current;
+            self.column = self.end_column;
 
             if self.is_at_end() {
                 return Token {
                     token_type: TokenType::EOF,
                     lexeme: "",
                     line: self.line,
-                    column: self.current as u32,
+                    column: self.current,
+                    end_column: self.current,
+                    span: SourceSpan {
+                        start: self.start,
+                        end: self.current,
+                    },
                 };
             }
 
@@ -324,6 +346,7 @@ impl<'a> Lexer<'a> {
                             if self.peek() == '\n' {
                                 self.line += 1;
                                 self.column = 0;
+                                self.end_column = 0;
                             }
                             self.advance();
                         }
@@ -343,6 +366,7 @@ impl<'a> Lexer<'a> {
                     // self.add_token(TokenType::NewLine);
                     self.line += 1;
                     self.column = 0;
+                    self.end_column = 0;
                     continue;
                 }
                 _ => panic!(
@@ -422,7 +446,7 @@ impl<'a> Lexer<'a> {
         }
 
         self.current += 1;
-        self.column += 1;
+        self.end_column += 1;
         true
     }
 
@@ -443,7 +467,7 @@ impl<'a> Lexer<'a> {
     fn advance(&mut self) -> char {
         let ch = self.peek();
         self.current += 1;
-        self.column += 1;
+        self.end_column += 1;
         ch
     }
 
@@ -458,6 +482,11 @@ impl<'a> Lexer<'a> {
             lexeme: literal,
             line: self.line,
             column: self.column,
+            end_column: self.end_column,
+            span: SourceSpan {
+                start: self.start,
+                end: self.current,
+            },
         }
     }
 }
