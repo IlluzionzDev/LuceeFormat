@@ -1,11 +1,11 @@
-use std::rc::Rc;
 use crate::lexer::Token;
 use crate::visitor::Walkable;
+use std::rc::Rc;
 
 /// Barebones AST representation of a file. Aims to contain as much
 /// syntax information as possible for formatting and linting reasons. Can be parsed
 /// and strip out stuff for more backend processing.
-/// 
+///
 /// Terminal AST nodes will use Tokens as much as possible to represent lexemes or straight literals, because
 /// positional data is already included.
 #[derive(Debug, Clone)]
@@ -44,7 +44,7 @@ impl<'ast> Walkable for Statement<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct VariableDeclaration<'ast> {
-    pub name: String,
+    pub name: Token<'ast>,
     pub value: Expression<'ast>,
 }
 
@@ -79,7 +79,7 @@ impl<'ast> Walkable for ReturnStatement<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct LuceeFunction<'ast> {
-    pub attributes: Vec<(String, Expression<'ast>)>,
+    pub attributes: Vec<(Token<'ast>, Expression<'ast>)>,
     pub body: Option<Vec<Statement<'ast>>>,
 }
 
@@ -91,7 +91,7 @@ impl<'ast> Walkable for LuceeFunction<'ast> {
 
 #[derive(Debug, Clone)]
 pub enum Expression<'ast> {
-    Literal(Rc<Literal>),
+    Literal(Rc<Literal<'ast>>),
     Identifier(Rc<String>),
     FunctionCall(Rc<FunctionCall<'ast>>),
     ObjectCreation(Rc<ObjectCreation<'ast>>),
@@ -115,8 +115,8 @@ impl<'ast> Walkable for Expression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct FunctionCall<'ast> {
-    pub name: String,
-    pub args: Vec<(Option<String>, Expression<'ast>)>,
+    pub name: Token<'ast>,
+    pub args: Vec<(Option<Token<'ast>>, Expression<'ast>)>,
 }
 
 impl<'ast> Walkable for FunctionCall<'ast> {
@@ -149,7 +149,7 @@ impl<'ast> Walkable for ArrayExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct StructExpression<'ast> {
-    pub elements: Vec<(String, Expression<'ast>)>,
+    pub elements: Vec<(Token<'ast>, Expression<'ast>)>,
 }
 
 impl<'ast> Walkable for StructExpression<'ast> {
@@ -160,7 +160,7 @@ impl<'ast> Walkable for StructExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct LambdaExpression<'ast> {
-    pub parameters: Vec<String>,
+    pub parameters: Vec<Token<'ast>>,
     pub body: Vec<Statement<'ast>>,
 }
 
@@ -210,7 +210,7 @@ impl<'ast> Walkable for TernaryExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct GroupExpression<'ast> {
-    pub expr: Box<Expression<'ast>>,
+    pub expr: Expression<'ast>,
 }
 
 impl<'ast> Walkable for GroupExpression<'ast> {
@@ -221,8 +221,8 @@ impl<'ast> Walkable for GroupExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct MemberAccess<'ast> {
-    pub object: Box<Expression<'ast>>,
-    pub property: Box<Expression<'ast>>,
+    pub object: Expression<'ast>,
+    pub property: Expression<'ast>,
 }
 
 impl<'ast> Walkable for MemberAccess<'ast> {
@@ -233,8 +233,8 @@ impl<'ast> Walkable for MemberAccess<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct IndexAccess<'ast> {
-    pub object: Box<Expression<'ast>>,
-    pub index: Box<Expression<'ast>>,
+    pub object: Expression<'ast>,
+    pub index: Expression<'ast>,
 }
 
 impl<'ast> Walkable for IndexAccess<'ast> {
@@ -244,14 +244,20 @@ impl<'ast> Walkable for IndexAccess<'ast> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Literal {
+pub struct Literal<'ast> {
+    pub token: Token<'ast>,
+    pub value: LiteralValue,
+}
+
+#[derive(Debug, Clone)]
+pub enum LiteralValue {
     Number(f64),
     String(String),
     Boolean(bool),
     Null,
 }
 
-impl Walkable for Literal {
+impl<'ast> Walkable for Literal<'ast> {
     fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
         visitor.visit_literal(self);
     }
@@ -298,7 +304,7 @@ pub enum UnaryOperator {
 #[derive(Debug, Clone)]
 pub struct FunctionDefinition<'ast> {
     pub access_modifier: Option<AccessModifier>,
-    pub return_type: Option<String>,
+    pub return_type: Option<Token<'ast>>,
     pub name: Token<'ast>,
     pub parameters: Vec<Parameter<'ast>>,
     pub body: Vec<Statement<'ast>>,
@@ -312,7 +318,7 @@ impl<'ast> Walkable for FunctionDefinition<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct ComponentDefinition<'ast> {
-    pub attributes: Vec<(String, Expression<'ast>)>,
+    pub attributes: Vec<(Token<'ast>, Expression<'ast>)>,
     pub body: Vec<Statement<'ast>>,
 }
 
@@ -332,8 +338,8 @@ pub enum AccessModifier {
 #[derive(Debug, Clone)]
 pub struct Parameter<'ast> {
     pub required: bool,
-    pub param_type: Option<String>,
-    pub name: String,
+    pub param_type: Option<Token<'ast>>,
+    pub name: Token<'ast>,
     pub default_value: Option<Expression<'ast>>,
 }
 
@@ -391,7 +397,7 @@ impl<'ast> Walkable for SwitchStatement<'ast> {
 #[derive(Debug, Clone)]
 pub struct TryCatchStatement<'ast> {
     pub try_body: Vec<Statement<'ast>>,
-    pub catch_var: String,
+    pub catch_var: Token<'ast>,
     pub catch_body: Vec<Statement<'ast>>,
 }
 
@@ -410,7 +416,7 @@ pub enum ForControl<'ast> {
         increment: Expression<'ast>,
     },
     LoopOver {
-        variable: String,
+        variable: Token<'ast>,
         array: Expression<'ast>,
     },
 }

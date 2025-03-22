@@ -91,8 +91,7 @@ pub trait Visitor {
     }
 
     /// Visit expressions. Don't recursively visit the expression, just the expression itself
-    fn visit_literal(&mut self, literal: &crate::ast::Literal) {
-    }
+    fn visit_literal(&mut self, literal: &crate::ast::Literal) {}
     fn visit_identifier(&mut self, identifier: &String) {}
     fn visit_function_call(&mut self, function_call: &crate::ast::FunctionCall) {}
     fn visit_object_creation(&mut self, object_creation: &crate::ast::ObjectCreation) {}
@@ -111,16 +110,16 @@ pub trait Visitor {
         variable_declaration: &crate::ast::VariableDeclaration,
     ) {
     }
-    fn visit_variable_assignment(&mut self, variable_assignment: &crate::ast::VariableAssignment) {
-    }
+    fn visit_variable_assignment(&mut self, variable_assignment: &crate::ast::VariableAssignment) {}
     fn visit_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) {}
-    fn visit_function_definition(&mut self, function_definition: &crate::ast::FunctionDefinition) {
-    }
+    fn visit_function_definition(&mut self, function_definition: &crate::ast::FunctionDefinition) {}
     fn visit_component_definition(
         &mut self,
         component_definition: &crate::ast::ComponentDefinition,
     ) {
-        component_definition.body.iter().for_each(|statement| { self.visit_statement(statement); });
+        component_definition.body.iter().for_each(|statement| {
+            self.visit_statement(statement);
+        });
     }
     fn visit_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) {}
     fn visit_if_statement(&mut self, if_statement: &crate::ast::IfStatement) {}

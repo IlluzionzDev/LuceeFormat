@@ -2,10 +2,10 @@ use crate::ast::Expression::Literal as ExpLiteral;
 use crate::ast::{
     AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement,
     ComponentDefinition, Expression, ForControl, ForStatement, FunctionCall, FunctionDefinition,
-    GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal, LuceeFunction,
-    MemberAccess, ObjectCreation, Parameter, ReturnStatement, Statement, StructExpression,
-    SwitchStatement, TernaryExpression, TryCatchStatement, UnaryExpression, UnaryOperator,
-    VariableAssignment, VariableDeclaration, WhileStatement, AST,
+    GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal, LiteralValue,
+    LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement, Statement,
+    StructExpression, SwitchStatement, TernaryExpression, TryCatchStatement, UnaryExpression,
+    UnaryOperator, VariableAssignment, VariableDeclaration, WhileStatement, AST,
 };
 use crate::lexer::{Lexer, SourceSpan, Token, TokenType};
 use std::rc::Rc;
@@ -208,7 +208,10 @@ impl<'ast> Parser<'ast> {
                         TokenType::MinusMinus => BinaryOperator::MinusMinus,
                         _ => BinaryOperator::PlusEqual,
                     },
-                    right: Box::new(Expression::Literal(Rc::new(Literal::Number(1.0)))),
+                    right: Box::new(Expression::Literal(Rc::new(Literal {
+                        value: LiteralValue::Number(1.0),
+                        token: op.clone(),
+                    }))),
                 },
             ))));
         }
@@ -225,8 +228,9 @@ impl<'ast> Parser<'ast> {
 
     fn variable_declaration(&mut self) -> Statement<'ast> {
         if self.advance_check(TokenType::Var) {
-            let identifier = self.consume(TokenType::Identifier, "Expected variable name");
-            let name = String::from(identifier.lexeme);
+            let name = self
+                .consume(TokenType::Identifier, "Expected variable name")
+                .clone();
             self.consume(TokenType::Equal, "Expected assignment operator '='");
             let value = self.expression();
             self.advance_check(TokenType::Semicolon);
@@ -284,7 +288,7 @@ impl<'ast> Parser<'ast> {
 
         let mut return_type = None;
         if self.check(TokenType::Identifier) {
-            return_type = Some(String::from(self.advance().lexeme));
+            return_type = Some(self.advance().clone());
         }
 
         self.consume(TokenType::Function, "Expected 'function' keyword");
@@ -334,16 +338,15 @@ impl<'ast> Parser<'ast> {
         // Defining return type
         let mut param_type = None;
         if self.check(TokenType::Identifier) && self.check_next(TokenType::Identifier) {
-            param_type = Some(String::from(
+            param_type = Some(
                 self.consume(TokenType::Identifier, "Expected parameter type")
-                    .lexeme,
-            ));
+                    .clone(),
+            );
         }
 
-        let name = String::from(
-            self.consume(TokenType::Identifier, "Expected parameter name")
-                .lexeme,
-        );
+        let name = self
+            .consume(TokenType::Identifier, "Expected parameter name")
+            .clone();
 
         let mut default_value = None;
         if self.advance_check(TokenType::Equal) {
@@ -395,12 +398,11 @@ impl<'ast> Parser<'ast> {
         Statement::ComponentDefinition(Rc::new(ComponentDefinition { attributes, body }))
     }
 
-    fn attribute_definitions(&mut self) -> Vec<(String, Expression<'ast>)> {
+    fn attribute_definitions(&mut self) -> Vec<(Token<'ast>, Expression<'ast>)> {
         let mut attributes = Vec::new();
 
         while self.check(TokenType::Identifier) {
-            let identifier = self.advance();
-            let name = String::from(identifier.lexeme);
+            let name = self.advance().clone();
             self.consume(TokenType::Equal, "Expected assignment operator '='");
             let value = self.expression();
             attributes.push((name, value));
@@ -446,10 +448,9 @@ impl<'ast> Parser<'ast> {
         self.advance_check(TokenType::Var);
 
         // Consume identifier, if next keyword is in, is a for in loop
-        let name = String::from(
-            self.consume(TokenType::Identifier, "Expected identifier")
-                .lexeme,
-        );
+        let name = self
+            .consume(TokenType::Identifier, "Expected identifier")
+            .clone();
 
         if self.check(TokenType::In) {
             self.consume(TokenType::In, "Expected 'in' keyword");
@@ -588,10 +589,9 @@ impl<'ast> Parser<'ast> {
         let try_body = self.consume_statement_block(true);
         self.consume(TokenType::Catch, "Expected 'catch' keyword");
         self.consume(TokenType::LeftParen, "Expected '('");
-        let catch_var = String::from(
-            self.consume(TokenType::Identifier, "Expected identifier")
-                .lexeme,
-        );
+        let catch_var = self
+            .consume(TokenType::Identifier, "Expected identifier")
+            .clone();
         self.consume(TokenType::RightParen, "Expected ')'");
         let catch_body = self.consume_statement_block(true);
         Statement::TryCatchStatement(Rc::new(TryCatchStatement {
@@ -770,8 +770,8 @@ impl<'ast> Parser<'ast> {
         while self.advance_check(TokenType::Dot) {
             let property = self.index_access();
             expression = Expression::MemberAccess(Rc::new(MemberAccess {
-                object: Box::new(expression),
-                property: Box::new(property),
+                object: expression,
+                property,
             }));
         }
 
@@ -785,8 +785,8 @@ impl<'ast> Parser<'ast> {
             let index = self.expression();
             self.consume(TokenType::RightBracket, "Expected ']'");
             expression = Expression::IndexAccess(Rc::new(IndexAccess {
-                object: Box::new(expression),
-                index: Box::new(index),
+                object: expression,
+                index,
             }));
         }
 
@@ -796,30 +796,42 @@ impl<'ast> Parser<'ast> {
     fn primary(&mut self) -> Expression<'ast> {
         // Literals
         if self.check(TokenType::String) {
-            return ExpLiteral(Rc::new(Literal::String(String::from(
-                self.advance().lexeme,
-            ))));
+            let token = self.advance().clone();
+            let value: String = String::from(token.lexeme);
+            return ExpLiteral(Rc::new(Literal {
+                token,
+                value: LiteralValue::String(value),
+            }));
         }
 
         if self.check(TokenType::Number) {
-            return ExpLiteral(Rc::new(Literal::Number(
-                self.advance().lexeme.parse().unwrap(),
-            )));
+            let token = self.advance().clone();
+            let value: f64 = token.lexeme.parse().unwrap();
+            return ExpLiteral(Rc::new(Literal {
+                token,
+                value: LiteralValue::Number(value),
+            }));
         }
 
         if self.check(TokenType::True) {
-            self.advance();
-            return ExpLiteral(Rc::new(Literal::Boolean(true)));
+            return ExpLiteral(Rc::new(Literal {
+                token: self.advance().clone(),
+                value: LiteralValue::Boolean(true),
+            }));
         }
 
         if self.check(TokenType::False) {
-            self.advance();
-            return ExpLiteral(Rc::new(Literal::Boolean(false)));
+            return ExpLiteral(Rc::new(Literal {
+                token: self.advance().clone(),
+                value: LiteralValue::Boolean(false),
+            }));
         }
 
         if self.check(TokenType::Null) {
-            self.advance();
-            return ExpLiteral(Rc::new(Literal::Null));
+            return ExpLiteral(Rc::new(Literal {
+                token: self.advance().clone(),
+                value: LiteralValue::Null,
+            }));
         }
 
         // Identifier for function call
@@ -827,7 +839,7 @@ impl<'ast> Parser<'ast> {
         if self.check(TokenType::Identifier) || self.check(TokenType::Contains) {
             // If followed by (, it's a function call
             if self.check_next(TokenType::LeftParen) {
-                let function = String::from(self.advance().lexeme);
+                let function = self.advance().clone();
 
                 self.consume(TokenType::LeftParen, "Expected '('");
 
@@ -840,7 +852,7 @@ impl<'ast> Parser<'ast> {
                     loop {
                         // Named argument
                         if self.check_next(TokenType::Equal) {
-                            let name = String::from(self.advance().lexeme);
+                            let name = self.advance().clone();
 
                             self.consume(TokenType::Equal, "Expected '='");
 
@@ -917,9 +929,9 @@ impl<'ast> Parser<'ast> {
             let mut elements = Vec::new();
             while !self.advance_check(TokenType::RightBrace) {
                 // Key is identifier or String
-                let mut key = String::from("");
+                let mut key = None;
                 if self.check(TokenType::Identifier) || self.check(TokenType::String) {
-                    key = String::from(self.advance().lexeme);
+                    key = Some(self.advance().clone());
                 } else {
                     self.error("Expected struct key");
                 }
@@ -927,7 +939,7 @@ impl<'ast> Parser<'ast> {
                     self.error("Struct keys can be assigned with ':' or '='");
                 }
                 let value = self.expression();
-                elements.push((key, value));
+                elements.push((key.unwrap(), value));
                 if self.advance_check(TokenType::RightBrace) {
                     break;
                 }
@@ -949,9 +961,7 @@ impl<'ast> Parser<'ast> {
             // Finally, group back to expression
             let expression = self.expression();
             self.consume(TokenType::RightParen, "Expected ')'");
-            return Expression::GroupExpression(Rc::new(GroupExpression {
-                expr: Box::new(expression),
-            }));
+            return Expression::GroupExpression(Rc::new(GroupExpression { expr: expression }));
         }
 
         Expression::None
@@ -962,10 +972,10 @@ impl<'ast> Parser<'ast> {
         let mut parameters = Vec::new();
 
         while !self.check(TokenType::Lambda) && !self.check(TokenType::RightParen) {
-            parameters.push(String::from(
+            parameters.push(
                 self.consume(TokenType::Identifier, "Expected identifier")
-                    .lexeme,
-            ));
+                    .clone(),
+            );
             if self.advance_check(TokenType::RightParen) || self.advance_check(TokenType::Lambda) {
                 break;
             }
