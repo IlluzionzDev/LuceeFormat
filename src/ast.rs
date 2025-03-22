@@ -79,6 +79,7 @@ impl<'ast> Walkable for ReturnStatement<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct LuceeFunction<'ast> {
+    pub name: Token<'ast>,
     pub attributes: Vec<(Token<'ast>, Expression<'ast>)>,
     pub body: Option<Vec<Statement<'ast>>>,
 }
@@ -92,7 +93,7 @@ impl<'ast> Walkable for LuceeFunction<'ast> {
 #[derive(Debug, Clone)]
 pub enum Expression<'ast> {
     Literal(Rc<Literal<'ast>>),
-    Identifier(Rc<String>),
+    Identifier(Rc<Token<'ast>>),
     FunctionCall(Rc<FunctionCall<'ast>>),
     ObjectCreation(Rc<ObjectCreation<'ast>>),
     ArrayExpression(Rc<ArrayExpression<'ast>>),
@@ -172,9 +173,9 @@ impl<'ast> Walkable for LambdaExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct BinaryExpression<'ast> {
-    pub left: Box<Expression<'ast>>,
+    pub left: Expression<'ast>,
     pub op: BinaryOperator,
-    pub right: Box<Expression<'ast>>,
+    pub right: Expression<'ast>,
 }
 
 impl<'ast> Walkable for BinaryExpression<'ast> {
@@ -186,7 +187,7 @@ impl<'ast> Walkable for BinaryExpression<'ast> {
 #[derive(Debug, Clone)]
 pub struct UnaryExpression<'ast> {
     pub op: UnaryOperator,
-    pub expr: Box<Expression<'ast>>,
+    pub expr: Expression<'ast>,
 }
 
 impl<'ast> Walkable for UnaryExpression<'ast> {
@@ -197,9 +198,9 @@ impl<'ast> Walkable for UnaryExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct TernaryExpression<'ast> {
-    pub condition: Box<Expression<'ast>>,
-    pub true_expr: Box<Expression<'ast>>,
-    pub false_expr: Box<Expression<'ast>>,
+    pub condition: Expression<'ast>,
+    pub true_expr: Expression<'ast>,
+    pub false_expr: Expression<'ast>,
 }
 
 impl<'ast> Walkable for TernaryExpression<'ast> {
@@ -295,10 +296,54 @@ pub enum BinaryOperator {
     ConcatEqual,
 }
 
+impl BinaryOperator {
+    pub fn to_lexeme(&self) -> &'static str {
+        match self {
+            BinaryOperator::Add => "+",
+            BinaryOperator::Subtract => "-",
+            BinaryOperator::Multiply => "*",
+            BinaryOperator::Divide => "/",
+            BinaryOperator::Equal => "==",
+            BinaryOperator::NotEqual => "!=",
+            BinaryOperator::Less => "<",
+            BinaryOperator::Greater => ">",
+            BinaryOperator::LessEqual => "<=",
+            BinaryOperator::GreaterEqual => ">=",
+            BinaryOperator::And => "&&",
+            BinaryOperator::Or => "||",
+            BinaryOperator::Xor => "^",
+            BinaryOperator::Contains => "contains",
+            BinaryOperator::Eq => "eq",
+            BinaryOperator::Neq => "neq",
+            BinaryOperator::Lt => "lt",
+            BinaryOperator::Gt => "gt",
+            BinaryOperator::StringConcat => "&",
+            BinaryOperator::LogicalAnd => "and",
+            BinaryOperator::LogicalOr => "or",
+            BinaryOperator::PlusEqual => "+=",
+            BinaryOperator::DivideEqual => "/=",
+            BinaryOperator::MultiplyEqual => "*=",
+            BinaryOperator::MinusEqual => "-=",
+            BinaryOperator::PlusPlus => "++",
+            BinaryOperator::MinusMinus => "--",
+            BinaryOperator::ConcatEqual => "&=",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum UnaryOperator {
     Not,
     Negate,
+}
+
+impl UnaryOperator {
+    pub fn to_lexeme(&self) -> &'static str {
+        match self {
+            UnaryOperator::Not => "!",
+            UnaryOperator::Negate => "-",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

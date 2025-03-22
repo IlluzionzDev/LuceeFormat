@@ -202,16 +202,16 @@ impl<'ast> Parser<'ast> {
             let op = self.advance();
             return Statement::ExpressionStmt(Rc::new(Expression::BinaryExpression(Rc::new(
                 BinaryExpression {
-                    left: Box::from(expression),
+                    left: expression,
                     op: match op.token_type {
                         TokenType::PlusPlus => BinaryOperator::PlusPlus,
                         TokenType::MinusMinus => BinaryOperator::MinusMinus,
                         _ => BinaryOperator::PlusEqual,
                     },
-                    right: Box::new(Expression::Literal(Rc::new(Literal {
+                    right: Expression::Literal(Rc::new(Literal {
                         value: LiteralValue::Number(1.0),
                         token: op.clone(),
-                    }))),
+                    })),
                 },
             ))));
         }
@@ -374,7 +374,9 @@ impl<'ast> Parser<'ast> {
      * "Calling" a function like a statement with an attribute list
      */
     fn lucee_function(&mut self) -> Statement<'ast> {
-        let identifier = self.consume(TokenType::Identifier, "Expected identifier");
+        let name = self
+            .consume(TokenType::Identifier, "Expected identifier")
+            .clone();
 
         let attributes = self.attribute_definitions();
 
@@ -385,7 +387,11 @@ impl<'ast> Parser<'ast> {
 
         self.advance_check(TokenType::Semicolon);
 
-        Statement::LuceeFunction(Rc::new(LuceeFunction { attributes, body }))
+        Statement::LuceeFunction(Rc::new(LuceeFunction {
+            name,
+            attributes,
+            body,
+        }))
     }
 
     fn component_definition(&mut self) -> Statement<'ast> {
@@ -567,8 +573,14 @@ impl<'ast> Parser<'ast> {
             }
 
             // Parse last break / return statement, optional as can be empty case
-            if self.advance_check(TokenType::Break) {
+            if self.check(TokenType::Break) {
+                let break_statement = self.advance().clone();
                 self.consume(TokenType::Semicolon, "Expected ';'");
+                body.push(Statement::LuceeFunction(Rc::new(LuceeFunction {
+                    name: break_statement,
+                    attributes: Vec::new(),
+                    body: None,
+                })));
             } else if self.check(TokenType::Return) {
                 // Push return statement
                 body.push(self.statement());
@@ -589,6 +601,7 @@ impl<'ast> Parser<'ast> {
         let try_body = self.consume_statement_block(true);
         self.consume(TokenType::Catch, "Expected 'catch' keyword");
         self.consume(TokenType::LeftParen, "Expected '('");
+        self.advance_check(TokenType::Var);
         let catch_var = self
             .consume(TokenType::Identifier, "Expected identifier")
             .clone();
@@ -613,9 +626,9 @@ impl<'ast> Parser<'ast> {
             self.consume(TokenType::Colon, "Expected ':'");
             let false_expr = self.expression();
             expression = Expression::TernaryExpression(Rc::new(TernaryExpression {
-                condition: Box::new(expression),
-                true_expr: Box::new(true_expr),
-                false_expr: Box::new(false_expr),
+                condition: expression,
+                true_expr,
+                false_expr,
             }));
         }
 
@@ -633,7 +646,7 @@ impl<'ast> Parser<'ast> {
             let operator = self.advance().token_type;
             let right = self.comparison();
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
-                left: Box::new(expression),
+                left: expression,
                 op: match operator {
                     TokenType::EqualEqual => BinaryOperator::Equal,
                     TokenType::BangEqual => BinaryOperator::NotEqual,
@@ -641,7 +654,7 @@ impl<'ast> Parser<'ast> {
                     TokenType::Neq => BinaryOperator::Neq,
                     _ => BinaryOperator::Equal,
                 },
-                right: Box::new(right),
+                right,
             }));
         }
 
@@ -667,7 +680,7 @@ impl<'ast> Parser<'ast> {
             let operator = self.advance().token_type;
             let right = self.term();
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
-                left: Box::new(expression),
+                left: expression,
                 op: match operator {
                     TokenType::Less => BinaryOperator::Less,
                     TokenType::Greater => BinaryOperator::Greater,
@@ -683,7 +696,7 @@ impl<'ast> Parser<'ast> {
                     TokenType::Xor => BinaryOperator::Xor,
                     _ => BinaryOperator::Less,
                 },
-                right: Box::new(right),
+                right,
             }));
         }
 
@@ -703,7 +716,7 @@ impl<'ast> Parser<'ast> {
             let operator = self.advance().token_type;
             let right = self.factor();
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
-                left: Box::new(expression),
+                left: expression,
                 op: match operator {
                     TokenType::Plus => BinaryOperator::Add,
                     TokenType::Minus => BinaryOperator::Subtract,
@@ -713,7 +726,7 @@ impl<'ast> Parser<'ast> {
                     TokenType::AmpersandEqual => BinaryOperator::ConcatEqual,
                     _ => BinaryOperator::Add,
                 },
-                right: Box::new(right),
+                right,
             }));
         }
 
@@ -731,7 +744,7 @@ impl<'ast> Parser<'ast> {
             let operator = self.advance().token_type;
             let right = self.unary();
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
-                left: Box::new(expression),
+                left: expression,
                 op: match operator {
                     TokenType::Star => BinaryOperator::Multiply,
                     TokenType::Slash => BinaryOperator::Divide,
@@ -739,7 +752,7 @@ impl<'ast> Parser<'ast> {
                     TokenType::SlashEqual => BinaryOperator::DivideEqual,
                     _ => BinaryOperator::Multiply,
                 },
-                right: Box::new(right),
+                right,
             }));
         }
 
@@ -757,7 +770,7 @@ impl<'ast> Parser<'ast> {
                     TokenType::Bang => UnaryOperator::Not,
                     _ => UnaryOperator::Negate,
                 },
-                expr: Box::new(right),
+                expr: right,
             }));
         }
 
@@ -895,7 +908,7 @@ impl<'ast> Parser<'ast> {
                 return self.lambda_expression();
             }
 
-            return Expression::Identifier(Rc::new(String::from(self.advance().lexeme)));
+            return Expression::Identifier(Rc::new(self.advance().clone()));
         }
 
         // Object creation
