@@ -34,6 +34,7 @@ pub enum Statement<'ast> {
     WhileStatement(Rc<WhileStatement<'ast>>),
     SwitchStatement(Rc<SwitchStatement<'ast>>),
     TryCatchStatement(Rc<TryCatchStatement<'ast>>),
+    CommentStatement(Rc<Comment<'ast>>),
 }
 
 impl<'ast> Walkable for Statement<'ast> {
@@ -474,6 +475,6 @@ pub struct CaseStatement<'ast> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Comment {
-    pub content: String,
+pub struct Comment<'ast> {
+    pub content: Token<'ast>,
 }

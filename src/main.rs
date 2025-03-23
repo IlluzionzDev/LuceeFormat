@@ -39,14 +39,20 @@ fn main() {
     ast.walk(&mut formatter);
     let traverse_end = traverse_start.elapsed().as_micros();
 
-    // println!("{}", formatter.formatted_source);
+    let write_start = std::time::Instant::now();
 
     // Write string to file
     std::fs::write("test/output.cfc", formatter.formatted_source).unwrap();
+
+    let write_end = write_start.elapsed().as_micros();
+
+    let total_time = start_file.elapsed().as_micros();
 
     // Print out the time taken
     println!("File Open Time taken: {}us", end_file);
     println!("Lex Time taken: {}us", lex_time);
     println!("Parse Time taken: {}us", parse_time);
     println!("Traverse Time taken: {}us", traverse_end);
+    println!("Write Time taken: {}us", write_end);
+    println!("Total Time taken: {}us", total_time);
 }

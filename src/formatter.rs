@@ -272,9 +272,18 @@ impl Visitor for Formatter {
         self.formatted_source.push('\n');
         component_definition.body.iter().for_each(|body| {
             self.add_current_indent();
-            self.visit_statement(body);
-            self.formatted_source.push('\n');
-            self.formatted_source.push('\n');
+
+            match &body {
+                Statement::CommentStatement(comment) => {
+                    self.visit_comment_statement(comment);
+                    self.formatted_source.push('\n');
+                }
+                _ => {
+                    self.visit_statement(body);
+                    self.formatted_source.push('\n');
+                    self.formatted_source.push('\n');
+                }
+            }
         });
 
         self.indent_level -= 1;
@@ -488,5 +497,10 @@ impl Visitor for Formatter {
         self.indent_level -= 1;
         self.add_current_indent();
         self.formatted_source.push('}');
+    }
+
+    fn visit_comment_statement(&mut self, comment_statement: &crate::ast::Comment) {
+        self.formatted_source
+            .push_str(comment_statement.content.lexeme);
     }
 }

@@ -1,6 +1,6 @@
 use crate::ast::Expression::Literal as ExpLiteral;
 use crate::ast::{
-    AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement,
+    AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement, Comment,
     ComponentDefinition, Expression, ForControl, ForStatement, FunctionCall, FunctionDefinition,
     GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal, LiteralValue,
     LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement, Statement,
@@ -183,6 +183,10 @@ impl<'ast> Parser<'ast> {
             return self.try_catch_statement();
         }
 
+        if self.check(TokenType::Comment) {
+            return self.comment();
+        }
+
         // Expression Statement
         let expression = self.expression();
 
@@ -224,6 +228,11 @@ impl<'ast> Parser<'ast> {
         }
 
         Statement::ExpressionStmt(Rc::new(expression))
+    }
+
+    fn comment(&mut self) -> Statement<'ast> {
+        let comment = self.advance().clone();
+        Statement::CommentStatement(Rc::new(Comment { content: comment }))
     }
 
     fn variable_declaration(&mut self) -> Statement<'ast> {
