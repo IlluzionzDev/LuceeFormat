@@ -339,8 +339,8 @@ impl<'a> Lexer<'a> {
                         while self.peek() != '\n' && !self.is_at_end() {
                             self.advance();
                         }
-                        // continue;
-                        return self.add_token(TokenType::Comment);
+                        continue;
+                        // return self.add_token(TokenType::Comment);
                     } else if self.match_char('*') {
                         while (self.peek() != '*' || self.peek_next() != '/') && !self.is_at_end() {
                             if self.peek() == '\n' {
@@ -352,8 +352,8 @@ impl<'a> Lexer<'a> {
                         }
                         self.advance();
                         self.advance();
-                        // continue;
-                        return self.add_token(TokenType::Comment);
+                        continue;
+                        // return self.add_token(TokenType::Comment);
                     } else {
                         return self.add_token(TokenType::Slash);
                     }

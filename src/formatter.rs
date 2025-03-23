@@ -31,7 +31,7 @@ impl Visitor for Formatter {
         self.formatted_source.push_str(&identifier.lexeme);
     }
     fn visit_function_call(&mut self, function_call: &crate::ast::FunctionCall) {
-        self.formatted_source.push_str(&function_call.name.lexeme);
+        self.visit_expression(&function_call.name);
         self.formatted_source.push('(');
 
         let mut it = function_call.args.iter().peekable();
@@ -481,6 +481,13 @@ impl Visitor for Formatter {
         self.add_current_indent();
         self.formatted_source.push_str("} catch (");
 
+        match &try_catch_statement.catch_var_type {
+            Some(var_type) => {
+                self.visit_expression(var_type);
+                self.formatted_source.push(' ');
+            }
+            None => {}
+        }
         self.formatted_source
             .push_str(&try_catch_statement.catch_var.lexeme);
 

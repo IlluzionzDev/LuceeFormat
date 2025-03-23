@@ -117,7 +117,7 @@ impl<'ast> Walkable for Expression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct FunctionCall<'ast> {
-    pub name: Token<'ast>,
+    pub name: Expression<'ast>,
     pub args: Vec<(Option<Token<'ast>>, Expression<'ast>)>,
 }
 
@@ -444,6 +444,7 @@ impl<'ast> Walkable for SwitchStatement<'ast> {
 pub struct TryCatchStatement<'ast> {
     pub try_body: Vec<Statement<'ast>>,
     pub catch_var: Token<'ast>,
+    pub catch_var_type: Option<Expression<'ast>>,
     pub catch_body: Vec<Statement<'ast>>,
 }
 

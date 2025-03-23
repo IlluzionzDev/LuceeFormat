@@ -13,7 +13,7 @@ fn main() {
     let start_file = std::time::Instant::now();
 
     // Read in test.cfm into a string
-    let source = std::fs::read_to_string("test/pwf.cfc").unwrap();
+    let source = std::fs::read_to_string("test/fetcher.cfc").unwrap();
 
     let end_file = start_file.elapsed().as_micros();
 

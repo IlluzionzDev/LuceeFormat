@@ -190,6 +190,10 @@ impl<'ast> Parser<'ast> {
         // Expression Statement
         let expression = self.expression();
 
+        // If ( after expression and expression was [] access, it's a function call
+        // Because functions can be stored in objects, then later called
+        if self.check(TokenType::LeftParen) {}
+
         // If assigning expression to something else
         if self.advance_check(TokenType::Equal) {
             let value = self.expression();
@@ -611,6 +615,12 @@ impl<'ast> Parser<'ast> {
         self.consume(TokenType::Catch, "Expected 'catch' keyword");
         self.consume(TokenType::LeftParen, "Expected '('");
         self.advance_check(TokenType::Var);
+        let mut catch_var_type = None;
+        if self.check(TokenType::Identifier)
+            && (self.check_next(TokenType::Identifier) || self.check_next(TokenType::Dot))
+        {
+            catch_var_type = Some(self.expression());
+        }
         let catch_var = self
             .consume(TokenType::Identifier, "Expected identifier")
             .clone();
@@ -619,12 +629,28 @@ impl<'ast> Parser<'ast> {
         Statement::TryCatchStatement(Rc::new(TryCatchStatement {
             try_body,
             catch_var,
+            catch_var_type,
             catch_body,
         }))
     }
 
     fn expression(&mut self) -> Expression<'ast> {
-        self.ternary()
+        let expression = self.ternary();
+
+        // Attempt post expression logic
+        // Separate from post expression in statement, as these can appear freely after expressions not
+        // only in statement lines
+        match &expression {
+            // Sometimes index access is accessing a function definition, and wants to be called straight after access
+            Expression::IndexAccess(_) => {
+                if self.check(TokenType::LeftParen) {
+                    return self.function_call(expression);
+                }
+            }
+            _ => {}
+        }
+
+        expression
     }
 
     fn ternary(&mut self) -> Expression<'ast> {
@@ -862,54 +888,9 @@ impl<'ast> Parser<'ast> {
             // If followed by (, it's a function call
             if self.check_next(TokenType::LeftParen) {
                 let function = self.advance().clone();
+                let name = Expression::Identifier(Rc::new(function));
 
-                self.consume(TokenType::LeftParen, "Expected '('");
-
-                // Function arguments, can be named, eg arg1 = "value"
-                // Can be separate by commas or not,
-                // cannot mix named and unnamed arguments
-                if !self.advance_check(TokenType::RightParen) {
-                    let mut arguments = Vec::new();
-
-                    loop {
-                        // Named argument
-                        if self.check_next(TokenType::Equal) {
-                            let name = self.advance().clone();
-
-                            self.consume(TokenType::Equal, "Expected '='");
-
-                            let value = self.expression();
-
-                            arguments.push((Some(name), value));
-                        } else {
-                            // Unnamed argument
-                            arguments.push((None, self.expression()));
-                        }
-
-                        // If comma, keep parsing, or stop if encountered ')'
-                        if !self.advance_check(TokenType::Comma)
-                            || self.advance_check(TokenType::RightParen)
-                        {
-                            break;
-                        }
-                    }
-
-                    self.consume(TokenType::RightParen, "Expected ')'");
-
-                    self.advance_check(TokenType::Semicolon);
-
-                    return Expression::FunctionCall(Rc::new(FunctionCall {
-                        name: function,
-                        args: arguments,
-                    }));
-                }
-
-                self.advance_check(TokenType::Semicolon);
-
-                return Expression::FunctionCall(Rc::new(FunctionCall {
-                    name: function,
-                    args: Vec::new(),
-                }));
+                return self.function_call(name);
             }
 
             // If followed by =>, single argument lambda
@@ -1008,5 +989,57 @@ impl<'ast> Parser<'ast> {
 
         let body = self.consume_statement_block(true);
         Expression::LambdaExpression(Rc::new(LambdaExpression { parameters, body }))
+    }
+
+    // Pass in function calling as expression, either identifier or array access usually
+    // Processing function arguments
+    fn function_call(&mut self, function: Expression<'ast>) -> Expression<'ast> {
+        self.consume(TokenType::LeftParen, "Expected '('");
+
+        // Function arguments, can be named, eg arg1 = "value"
+        // Can be separate by commas or not,
+        // cannot mix named and unnamed arguments
+        if !self.advance_check(TokenType::RightParen) {
+            let mut arguments = Vec::new();
+
+            loop {
+                // Named argument
+                if self.check_next(TokenType::Equal) {
+                    let name = self.advance().clone();
+
+                    self.consume(TokenType::Equal, "Expected '='");
+
+                    let value = self.expression();
+
+                    arguments.push((Some(name), value));
+                } else {
+                    // Unnamed argument
+                    arguments.push((None, self.expression()));
+                }
+
+                // If comma, keep parsing, or stop if encountered ')'
+                if !self.advance_check(TokenType::Comma)
+                    || self.advance_check(TokenType::RightParen)
+                {
+                    break;
+                }
+            }
+
+            self.consume(TokenType::RightParen, "Expected ')'");
+
+            self.advance_check(TokenType::Semicolon);
+
+            return Expression::FunctionCall(Rc::new(FunctionCall {
+                name: function,
+                args: arguments,
+            }));
+        }
+
+        self.advance_check(TokenType::Semicolon);
+
+        return Expression::FunctionCall(Rc::new(FunctionCall {
+            name: function,
+            args: Vec::new(),
+        }));
     }
 }
