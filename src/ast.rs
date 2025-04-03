@@ -45,7 +45,9 @@ impl<'ast> Walkable for Statement<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct VariableDeclaration<'ast> {
+    pub var_token: Token<'ast>,
     pub name: Token<'ast>,
+    pub equals_token: Token<'ast>,
     pub value: Expression<'ast>,
 }
 
@@ -58,6 +60,7 @@ impl<'ast> Walkable for VariableDeclaration<'ast> {
 #[derive(Debug, Clone)]
 pub struct VariableAssignment<'ast> {
     pub name: Expression<'ast>,
+    pub equals_token: Token<'ast>,
     pub value: Expression<'ast>,
 }
 
@@ -69,6 +72,7 @@ impl<'ast> Walkable for VariableAssignment<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct ReturnStatement<'ast> {
+    pub return_token: Token<'ast>,
     pub value: Option<Expression<'ast>>,
 }
 
@@ -118,6 +122,8 @@ impl<'ast> Walkable for Expression<'ast> {
 #[derive(Debug, Clone)]
 pub struct FunctionCall<'ast> {
     pub name: Expression<'ast>,
+    pub left_paren: Token<'ast>,
+    pub right_paren: Token<'ast>,
     pub args: Vec<(Option<Token<'ast>>, Expression<'ast>)>,
 }
 
@@ -129,6 +135,7 @@ impl<'ast> Walkable for FunctionCall<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct ObjectCreation<'ast> {
+    pub new_token: Token<'ast>,
     pub expr: Expression<'ast>,
 }
 
@@ -140,6 +147,8 @@ impl<'ast> Walkable for ObjectCreation<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct ArrayExpression<'ast> {
+    pub left_bracket: Token<'ast>,
+    pub right_bracket: Token<'ast>,
     pub elements: Vec<Expression<'ast>>,
 }
 
@@ -151,6 +160,8 @@ impl<'ast> Walkable for ArrayExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct StructExpression<'ast> {
+    pub left_brace: Token<'ast>,
+    pub right_brace: Token<'ast>,
     pub elements: Vec<(Token<'ast>, Expression<'ast>)>,
 }
 
@@ -162,7 +173,12 @@ impl<'ast> Walkable for StructExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct LambdaExpression<'ast> {
+    pub left_paren: Option<Token<'ast>>,
+    pub right_paren: Option<Token<'ast>>,
     pub parameters: Vec<Token<'ast>>,
+    pub lambda_token: Token<'ast>,
+    pub left_brace: Option<Token<'ast>>,
+    pub right_brace: Option<Token<'ast>>,
     pub body: Vec<Statement<'ast>>,
 }
 
@@ -350,10 +366,16 @@ impl UnaryOperator {
 #[derive(Debug, Clone)]
 pub struct FunctionDefinition<'ast> {
     pub access_modifier: Option<AccessModifier>,
+    pub access_modifier_token: Option<Token<'ast>>,
     pub return_type: Option<Token<'ast>>,
+    pub function_token: Token<'ast>,
     pub name: Token<'ast>,
+    pub left_paren: Token<'ast>,
     pub parameters: Vec<Parameter<'ast>>,
+    pub right_paren: Token<'ast>,
     pub body: Vec<Statement<'ast>>,
+    pub left_brace: Token<'ast>,
+    pub right_brace: Token<'ast>,
 }
 
 impl<'ast> Walkable for FunctionDefinition<'ast> {
@@ -364,8 +386,11 @@ impl<'ast> Walkable for FunctionDefinition<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct ComponentDefinition<'ast> {
+    pub component_token: Token<'ast>,
     pub attributes: Vec<(Token<'ast>, Expression<'ast>)>,
     pub body: Vec<Statement<'ast>>,
+    pub left_brace: Token<'ast>,
+    pub right_brace: Token<'ast>,
 }
 
 impl<'ast> Walkable for ComponentDefinition<'ast> {
@@ -383,18 +408,21 @@ pub enum AccessModifier {
 
 #[derive(Debug, Clone)]
 pub struct Parameter<'ast> {
-    pub required: bool,
+    pub required: Option<Token<'ast>>,
     pub param_type: Option<Token<'ast>>,
     pub name: Token<'ast>,
+    pub equals_token: Option<Token<'ast>>,
     pub default_value: Option<Expression<'ast>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct IfStatement<'ast> {
+    pub if_token: Token<'ast>,
     pub condition: Expression<'ast>,
     pub body: Vec<Statement<'ast>>,
     // Potentially contains another if statement
     pub else_body: Option<Vec<Statement<'ast>>>,
+    pub else_token: Option<Token<'ast>>,
 }
 
 impl<'ast> Walkable for IfStatement<'ast> {
@@ -405,8 +433,31 @@ impl<'ast> Walkable for IfStatement<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct ForStatement<'ast> {
+    pub for_token: Token<'ast>,
+    pub left_paren: Token<'ast>,
+    pub right_paren: Token<'ast>,
     pub control: ForControl<'ast>,
     pub body: Vec<Statement<'ast>>,
+    pub left_brace: Token<'ast>,
+    pub right_brace: Token<'ast>,
+}
+
+// Used to determine if For loop is traditional var i = 0, or for (i in array)
+#[derive(Debug, Clone)]
+pub enum ForControl<'ast> {
+    Increment {
+        var_token: Option<Token<'ast>>,
+        init: Expression<'ast>,
+        equals_token: Token<'ast>,
+        condition: Expression<'ast>,
+        increment: Expression<'ast>,
+    },
+    LoopOver {
+        var_token: Option<Token<'ast>>,
+        variable: Token<'ast>,
+        in_token: Token<'ast>,
+        array: Expression<'ast>,
+    },
 }
 
 impl<'ast> Walkable for ForStatement<'ast> {
@@ -418,8 +469,14 @@ impl<'ast> Walkable for ForStatement<'ast> {
 #[derive(Debug, Clone)]
 pub struct WhileStatement<'ast> {
     pub do_while: bool, // If is in form do { } while (condition), otherwise while (condition) { }
+    pub do_token: Option<Token<'ast>>,
+    pub while_token: Token<'ast>,
     pub condition: Expression<'ast>,
+    pub left_paren: Token<'ast>,
+    pub right_paren: Token<'ast>,
     pub body: Vec<Statement<'ast>>,
+    pub left_brace: Token<'ast>,
+    pub right_brace: Token<'ast>,
 }
 
 impl<'ast> Walkable for WhileStatement<'ast> {
@@ -430,8 +487,21 @@ impl<'ast> Walkable for WhileStatement<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct SwitchStatement<'ast> {
+    pub switch_token: Token<'ast>,
+    pub left_paren: Token<'ast>,
+    pub right_paren: Token<'ast>,
     pub expression: Expression<'ast>,
+    pub left_brace: Token<'ast>,
+    pub right_brace: Token<'ast>,
     pub cases: Vec<CaseStatement<'ast>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CaseStatement<'ast> {
+    pub is_default: bool,
+    // List of conditions (case/default token, expression (option as default omits this), colon token)
+    pub condition: Option<Vec<(Token<'ast>, Expression<'ast>, Token<'ast>)>>,
+    pub body: Vec<Statement<'ast>>,
 }
 
 impl<'ast> Walkable for SwitchStatement<'ast> {
@@ -442,37 +512,25 @@ impl<'ast> Walkable for SwitchStatement<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct TryCatchStatement<'ast> {
+    pub try_token: Token<'ast>,
     pub try_body: Vec<Statement<'ast>>,
-    pub catch_var: Token<'ast>,
+    pub try_left_brace: Token<'ast>,
+    pub try_right_brace: Token<'ast>,
+    pub catch_token: Token<'ast>,
+    pub left_paren: Token<'ast>,
+    pub right_paren: Token<'ast>,
+    pub catch_var_token: Option<Token<'ast>>,
     pub catch_var_type: Option<Expression<'ast>>,
+    pub catch_var: Token<'ast>,
     pub catch_body: Vec<Statement<'ast>>,
+    pub catch_left_brace: Token<'ast>,
+    pub catch_right_brace: Token<'ast>,
 }
 
 impl<'ast> Walkable for TryCatchStatement<'ast> {
     fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
         visitor.visit_try_catch_statement(self);
     }
-}
-
-// Used to determine if For loop is traditional var i = 0, or for (i in array)
-#[derive(Debug, Clone)]
-pub enum ForControl<'ast> {
-    Increment {
-        init: Expression<'ast>,
-        condition: Expression<'ast>,
-        increment: Expression<'ast>,
-    },
-    LoopOver {
-        variable: Token<'ast>,
-        array: Expression<'ast>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub struct CaseStatement<'ast> {
-    pub is_default: bool,
-    pub condition: Option<Vec<Expression<'ast>>>,
-    pub body: Vec<Statement<'ast>>,
 }
 
 #[derive(Debug, Clone)]

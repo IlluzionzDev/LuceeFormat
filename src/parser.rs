@@ -44,6 +44,7 @@ impl<'ast> Parser<'ast> {
                 end_column: 0,
                 lexeme: "",
                 span: SourceSpan { start: 0, end: 0 },
+                comments: None,
             },
             lex_time: 0,
         }
@@ -128,10 +129,13 @@ impl<'ast> Parser<'ast> {
         }
 
         if self.check(TokenType::Return) {
-            self.advance();
+            let return_token = self
+                .consume(TokenType::Return, "Expected return statement")
+                .clone();
             let expression = self.expression();
             self.advance_check(TokenType::Semicolon);
             return Statement::ReturnStatement(Rc::new(ReturnStatement {
+                return_token,
                 value: Some(expression),
             }));
         }
@@ -190,15 +194,13 @@ impl<'ast> Parser<'ast> {
         // Expression Statement
         let expression = self.expression();
 
-        // If ( after expression and expression was [] access, it's a function call
-        // Because functions can be stored in objects, then later called
-        if self.check(TokenType::LeftParen) {}
-
         // If assigning expression to something else
-        if self.advance_check(TokenType::Equal) {
+        if self.check(TokenType::Equal) {
+            let equals_token = self.consume(TokenType::Equal, "Expected '='").clone();
             let value = self.expression();
             self.advance_check(TokenType::Semicolon);
             return Statement::VariableAssignment(Rc::new(VariableAssignment {
+                equals_token,
                 name: expression,
                 value,
             }));
@@ -240,28 +242,49 @@ impl<'ast> Parser<'ast> {
     }
 
     fn variable_declaration(&mut self) -> Statement<'ast> {
-        if self.advance_check(TokenType::Var) {
-            let name = self
-                .consume(TokenType::Identifier, "Expected variable name")
-                .clone();
-            self.consume(TokenType::Equal, "Expected assignment operator '='");
-            let value = self.expression();
-            self.advance_check(TokenType::Semicolon);
-            return Statement::VariableDeclaration(Rc::new(VariableDeclaration { name, value }));
-        }
-
-        panic!("Invalid variable declaration");
+        let var_token = self
+            .consume(TokenType::Var, "Expected 'var' keyword")
+            .clone();
+        let name = self
+            .consume(TokenType::Identifier, "Expected variable name")
+            .clone();
+        let equals_token = self
+            .consume(TokenType::Equal, "Expected assignment operator '='")
+            .clone();
+        let value = self.expression();
+        self.advance_check(TokenType::Semicolon);
+        return Statement::VariableDeclaration(Rc::new(VariableDeclaration {
+            var_token,
+            name,
+            value,
+            equals_token,
+        }));
     }
 
-    fn consume_statement_block(&mut self, optional_braces: bool) -> Vec<Statement<'ast>> {
+    /// Consume a statement block. Takes param if braces are optional for the block, and if they are it means
+    /// can consume a single statement without braces
+    /// Return type is a tuple of the statements, and the optional opening and closing brace tokens
+    fn consume_statement_block(
+        &mut self,
+        optional_braces: bool,
+    ) -> (
+        Vec<Statement<'ast>>,
+        Option<Token<'ast>>,
+        Option<Token<'ast>>,
+    ) {
         let mut has_braces = false;
+        let mut left_brace = None;
+        let mut right_brace = None;
 
         // If { exists, consume multiple statements, otherwise only consume one
         if optional_braces {
-            has_braces = self.advance_check(TokenType::LeftBrace);
+            has_braces = self.check(TokenType::LeftBrace);
+            if has_braces {
+                left_brace = Some(self.advance().clone());
+            }
         } else {
             has_braces = true;
-            self.consume(TokenType::LeftBrace, "Expected '{'");
+            left_brace = Some(self.consume(TokenType::LeftBrace, "Expected '{'").clone());
         }
 
         let mut body = Vec::new();
@@ -274,56 +297,61 @@ impl<'ast> Parser<'ast> {
         }
 
         if optional_braces {
-            self.advance_check(TokenType::RightBrace);
+            if self.check(TokenType::RightBrace) {
+                right_brace = Some(self.advance().clone());
+            }
         } else {
-            self.consume(TokenType::RightBrace, "Expected '}'");
+            right_brace = Some(self.consume(TokenType::RightBrace, "Expected '}'").clone());
         }
 
-        body
+        (body, left_brace, right_brace)
     }
 
     fn function_definition(&mut self) -> Statement<'ast> {
         let access_modifier = match self.peek().token_type {
-            TokenType::Public => {
-                self.advance();
-                Some(AccessModifier::Public)
-            }
-            TokenType::Private => {
-                self.advance();
-                Some(AccessModifier::Private)
-            }
-            TokenType::Protected => {
-                self.advance();
-                Some(AccessModifier::Protected)
-            }
+            TokenType::Public => Some(AccessModifier::Public),
+            TokenType::Private => Some(AccessModifier::Private),
+            TokenType::Protected => Some(AccessModifier::Protected),
             _ => None,
         };
+        let mut access_modifier_token = None;
+        if (access_modifier.is_some()) {
+            access_modifier_token = Some(self.advance().clone());
+        }
 
         let mut return_type = None;
         if self.check(TokenType::Identifier) {
             return_type = Some(self.advance().clone());
         }
 
-        self.consume(TokenType::Function, "Expected 'function' keyword");
+        let function_token = self
+            .consume(TokenType::Function, "Expected 'function' keyword")
+            .clone();
 
         let name = self
             .consume(TokenType::Identifier, "Expected function name")
             .clone();
 
-        self.consume(TokenType::LeftParen, "Expected '('");
+        let left_paren = self.consume(TokenType::LeftParen, "Expected '('").clone();
         let mut parameters = Vec::new();
         if !self.check(TokenType::RightParen) {
             parameters = self.parameters();
         }
-        self.consume(TokenType::RightParen, "Expected ')'");
-        let body = self.consume_statement_block(false);
+        let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
+        let (body, left_brace, right_brace) = self.consume_statement_block(false);
 
         let function_definition: FunctionDefinition = FunctionDefinition {
             access_modifier,
+            access_modifier_token,
             return_type,
+            function_token,
             name,
+            left_paren,
             parameters,
+            right_paren,
             body,
+            left_brace: left_brace.unwrap(),
+            right_brace: right_brace.unwrap(),
         };
 
         Statement::FunctionDefinition(Rc::new(function_definition))
@@ -343,9 +371,9 @@ impl<'ast> Parser<'ast> {
     }
 
     fn parameter(&mut self) -> Parameter<'ast> {
-        let mut required = false;
-        if self.advance_check(TokenType::Required) {
-            required = true;
+        let mut required = None;
+        if self.check(TokenType::Required) {
+            required = Some(self.advance().clone());
         }
 
         // Defining return type
@@ -362,7 +390,9 @@ impl<'ast> Parser<'ast> {
             .clone();
 
         let mut default_value = None;
-        if self.advance_check(TokenType::Equal) {
+        let mut default_value_token = None;
+        if self.check(TokenType::Equal) {
+            default_value_token = Some(self.advance().clone());
             default_value = Some(self.expression());
             if default_value.is_none() {
                 self.error("Expected default value");
@@ -374,6 +404,7 @@ impl<'ast> Parser<'ast> {
             param_type,
             name,
             default_value,
+            equals_token: default_value_token,
         }
     }
 
@@ -395,7 +426,7 @@ impl<'ast> Parser<'ast> {
 
         let mut body = None;
         if !self.check(TokenType::Semicolon) {
-            body = Some(self.consume_statement_block(true));
+            body = Some(self.consume_statement_block(true).0);
         }
 
         self.advance_check(TokenType::Semicolon);
@@ -408,13 +439,21 @@ impl<'ast> Parser<'ast> {
     }
 
     fn component_definition(&mut self) -> Statement<'ast> {
-        self.consume(TokenType::Component, "Expected 'component' keyword");
+        let component_token = self
+            .consume(TokenType::Component, "Expected 'component' keyword")
+            .clone();
 
         let attributes = self.attribute_definitions();
 
-        let body = self.consume_statement_block(false);
+        let (body, left_brace, right_brace) = self.consume_statement_block(false);
 
-        Statement::ComponentDefinition(Rc::new(ComponentDefinition { attributes, body }))
+        Statement::ComponentDefinition(Rc::new(ComponentDefinition {
+            component_token,
+            attributes,
+            body,
+            left_brace: left_brace.unwrap(),
+            right_brace: right_brace.unwrap(),
+        }))
     }
 
     fn attribute_definitions(&mut self) -> Vec<(Token<'ast>, Expression<'ast>)> {
@@ -431,40 +470,49 @@ impl<'ast> Parser<'ast> {
     }
 
     fn if_statement(&mut self) -> Statement<'ast> {
-        self.consume(TokenType::If, "Expected 'if' keyword");
+        let if_token = self.consume(TokenType::If, "Expected 'if' keyword").clone();
         self.consume(TokenType::LeftParen, "Expected '('");
 
         let condition = self.expression();
 
         self.consume(TokenType::RightParen, "Expected ')'");
 
-        let body = self.consume_statement_block(true);
+        let (body, _, _) = self.consume_statement_block(true);
 
         let mut else_body = None;
-        if self.advance_check(TokenType::Else) {
+        let mut else_token = None;
+        if self.check(TokenType::Else) {
+            else_token = Some(self.advance().clone());
             if self.check(TokenType::If) {
                 // Else body is another IF statement
                 else_body = Some(vec![self.if_statement()]);
             } else {
                 // Else body is consumed statements
-                else_body = Some(self.consume_statement_block(true));
+                else_body = Some(self.consume_statement_block(true).0);
             }
         }
 
         Statement::IfStatement(Rc::new(IfStatement {
+            if_token,
             condition,
             body,
             else_body,
+            else_token,
         }))
     }
 
     fn for_statement(&mut self) -> Statement<'ast> {
-        self.consume(TokenType::For, "Expected 'for' keyword");
+        let for_token = self
+            .consume(TokenType::For, "Expected 'for' keyword")
+            .clone();
 
-        self.consume(TokenType::LeftParen, "Expected '('");
+        let left_paren = self.consume(TokenType::LeftParen, "Expected '('").clone();
 
         // Check optional "var" keyword
-        self.advance_check(TokenType::Var);
+        let mut var_token = None;
+        if self.check(TokenType::Var) {
+            var_token = Some(self.advance().clone());
+        }
 
         // Consume identifier, if next keyword is in, is a for in loop
         let name = self
@@ -472,67 +520,99 @@ impl<'ast> Parser<'ast> {
             .clone();
 
         if self.check(TokenType::In) {
-            self.consume(TokenType::In, "Expected 'in' keyword");
+            let in_token = self.consume(TokenType::In, "Expected 'in' keyword").clone();
             let expression = self.expression();
-            self.consume(TokenType::RightParen, "Expected ')'");
-            let body = self.consume_statement_block(false);
+            let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
+            let (body, left_brace, right_brace) = self.consume_statement_block(false);
             Statement::ForStatement(Rc::new(ForStatement {
+                for_token,
+                left_paren,
+                right_paren,
                 control: ForControl::LoopOver {
+                    var_token,
                     variable: name,
+                    in_token,
                     array: expression,
                 },
                 body,
+                left_brace: left_brace.unwrap(),
+                right_brace: right_brace.unwrap(),
             }))
         } else {
-            self.consume(TokenType::Equal, "Expected assignment operator '='");
+            let equals_token = self
+                .consume(TokenType::Equal, "Expected assignment operator '='")
+                .clone();
             let init = self.expression();
             self.consume(TokenType::Semicolon, "Expected ';'");
             let condition = self.expression();
             self.consume(TokenType::Semicolon, "Expected ';'");
             let increment = self.expression();
-            self.consume(TokenType::RightParen, "Expected ')'");
-            let body = self.consume_statement_block(false);
+            let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
+            let (body, left_brace, right_brace) = self.consume_statement_block(false);
             Statement::ForStatement(Rc::new(ForStatement {
+                for_token,
+                left_paren,
+                right_paren,
                 control: ForControl::Increment {
+                    var_token,
                     init,
+                    equals_token,
                     condition,
                     increment,
                 },
                 body,
+                left_brace: left_brace.unwrap(),
+                right_brace: right_brace.unwrap(),
             }))
         }
     }
 
     fn while_statement(&mut self) -> Statement<'ast> {
-        if self.advance_check(TokenType::While) {
-            self.consume(TokenType::LeftParen, "Expected '('");
+        if self.check(TokenType::While) {
+            let while_token = self.advance().clone();
+            let left_paren = self.consume(TokenType::LeftParen, "Expected '('").clone();
 
             let condition = self.expression();
 
-            self.consume(TokenType::RightParen, "Expected ')'");
+            let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
 
-            let body = self.consume_statement_block(false);
+            let (body, left_brace, right_brace) = self.consume_statement_block(false);
 
             return Statement::WhileStatement(Rc::new(WhileStatement {
                 do_while: false,
+                do_token: None,
+                while_token,
                 condition,
+                left_paren,
+                right_paren,
                 body,
+                left_brace: left_brace.unwrap(),
+                right_brace: right_brace.unwrap(),
             }));
-        } else if self.advance_check(TokenType::Do) {
-            let body = self.consume_statement_block(false);
+        } else if self.check(TokenType::Do) {
+            let do_token = Some(self.advance().clone());
+            let (body, left_brace, right_brace) = self.consume_statement_block(false);
 
-            self.consume(TokenType::While, "Expected 'while' keyword");
+            let while_token = self
+                .consume(TokenType::While, "Expected 'while' keyword")
+                .clone();
 
-            self.consume(TokenType::LeftParen, "Expected '('");
+            let left_paren = self.consume(TokenType::LeftParen, "Expected '('").clone();
 
             let condition = self.expression();
 
-            self.consume(TokenType::RightParen, "Expected ')'");
+            let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
 
             return Statement::WhileStatement(Rc::new(WhileStatement {
                 do_while: true,
+                do_token,
+                while_token,
                 condition,
+                left_paren,
+                right_paren,
                 body,
+                left_brace: left_brace.unwrap(),
+                right_brace: right_brace.unwrap(),
             }));
         }
 
@@ -541,33 +621,39 @@ impl<'ast> Parser<'ast> {
     }
 
     fn switch_statement(&mut self) -> Statement<'ast> {
-        self.consume(TokenType::Switch, "Expected 'switch' keyword");
-        self.consume(TokenType::LeftParen, "Expected '('");
+        let switch_token = self
+            .consume(TokenType::Switch, "Expected 'switch' keyword")
+            .clone();
+        let left_paren = self.consume(TokenType::LeftParen, "Expected '('").clone();
         let expression = self.expression();
-        self.consume(TokenType::RightParen, "Expected ')'");
-        self.consume(TokenType::LeftBrace, "Expected '{'");
+        let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
+        let left_brace = self.consume(TokenType::LeftBrace, "Expected '{'").clone();
 
         let mut cases = Vec::new();
 
         // Handle case statements
-        while !self.advance_check(TokenType::RightBrace) {
+        while !self.check(TokenType::RightBrace) {
             let mut condition = Vec::new();
 
             // Consume multiple case statements
-            while self.advance_check(TokenType::Case) {
-                condition.push(self.expression());
-                self.consume(TokenType::Colon, "Expected ':'");
+            while self.check(TokenType::Case) {
+                let case_token = self.advance().clone();
+                let cond_expr = self.expression();
+                let colon = self.consume(TokenType::Colon, "Expected ':'").clone();
+                condition.push((case_token, cond_expr, colon));
             }
 
             let mut is_default = false;
 
-            if self.advance_check(TokenType::Default) {
+            if self.check(TokenType::Default) {
                 if !condition.is_empty() {
                     self.error("Cannot mix 'case' and 'default' in a switch statement");
                 }
+                let default_token = self.advance().clone();
 
                 is_default = true;
-                self.consume(TokenType::Colon, "Expected ':'");
+                let colon = self.consume(TokenType::Colon, "Expected ':'").clone();
+                condition.push((default_token, Expression::None, colon));
             }
 
             if condition.is_empty() && !is_default {
@@ -606,15 +692,32 @@ impl<'ast> Parser<'ast> {
             });
         }
 
-        Statement::SwitchStatement(Rc::new(SwitchStatement { expression, cases }))
+        let right_brace = self.consume(TokenType::RightBrace, "Expected '}'").clone();
+
+        Statement::SwitchStatement(Rc::new(SwitchStatement {
+            switch_token,
+            left_paren,
+            right_paren,
+            expression,
+            left_brace,
+            right_brace,
+            cases,
+        }))
     }
 
     fn try_catch_statement(&mut self) -> Statement<'ast> {
-        self.consume(TokenType::Try, "Expected 'try' keyword");
-        let try_body = self.consume_statement_block(true);
-        self.consume(TokenType::Catch, "Expected 'catch' keyword");
-        self.consume(TokenType::LeftParen, "Expected '('");
-        self.advance_check(TokenType::Var);
+        let try_token = self
+            .consume(TokenType::Try, "Expected 'try' keyword")
+            .clone();
+        let (try_body, try_left_brace, try_right_brace) = self.consume_statement_block(true);
+        let catch_token = self
+            .consume(TokenType::Catch, "Expected 'catch' keyword")
+            .clone();
+        let left_paren = self.consume(TokenType::LeftParen, "Expected '('").clone();
+        let mut catch_var_token = None;
+        if self.check(TokenType::Var) {
+            catch_var_token = Some(self.advance().clone());
+        }
         let mut catch_var_type = None;
         if self.check(TokenType::Identifier)
             && (self.check_next(TokenType::Identifier) || self.check_next(TokenType::Dot))
@@ -624,13 +727,22 @@ impl<'ast> Parser<'ast> {
         let catch_var = self
             .consume(TokenType::Identifier, "Expected identifier")
             .clone();
-        self.consume(TokenType::RightParen, "Expected ')'");
-        let catch_body = self.consume_statement_block(true);
+        let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
+        let (catch_body, catch_left_brace, catch_right_brace) = self.consume_statement_block(true);
         Statement::TryCatchStatement(Rc::new(TryCatchStatement {
+            try_token,
             try_body,
+            try_left_brace: try_left_brace.unwrap(),
+            try_right_brace: try_right_brace.unwrap(),
+            catch_token,
+            left_paren,
+            right_paren,
+            catch_var_token,
             catch_var,
             catch_var_type,
             catch_body,
+            catch_left_brace: catch_left_brace.unwrap(),
+            catch_right_brace: catch_right_brace.unwrap(),
         }))
     }
 
@@ -895,14 +1007,15 @@ impl<'ast> Parser<'ast> {
 
             // If followed by =>, single argument lambda
             if self.check_next(TokenType::Lambda) {
-                return self.lambda_expression();
+                return self.lambda_expression(None);
             }
 
             return Expression::Identifier(Rc::new(self.advance().clone()));
         }
 
         // Object creation
-        if self.advance_check(TokenType::New) {
+        if self.check(TokenType::New) {
+            let new_token = self.advance().clone();
             let expression = self.expression();
             match expression {
                 Expression::ObjectCreation(_) => {
@@ -910,27 +1023,39 @@ impl<'ast> Parser<'ast> {
                 }
                 _ => {}
             }
-            return Expression::ObjectCreation(Rc::new(ObjectCreation { expr: expression }));
+            return Expression::ObjectCreation(Rc::new(ObjectCreation {
+                new_token,
+                expr: expression,
+            }));
         }
 
         // Array literal
         // println!("Start array expression");
-        if self.advance_check(TokenType::LeftBracket) {
+        if self.check(TokenType::LeftBracket) {
+            let left_bracket = self.advance().clone();
             let mut elements = Vec::new();
-            while !self.advance_check(TokenType::RightBracket) {
+            while !self.check(TokenType::RightBracket) {
                 elements.push(self.expression());
-                if self.advance_check(TokenType::RightBracket) {
+                if self.check(TokenType::RightBracket) {
                     break;
                 }
                 self.consume(TokenType::Comma, "Expected ','");
             }
-            return Expression::ArrayExpression(Rc::new(ArrayExpression { elements }));
+            let right_bracket = self
+                .consume(TokenType::RightBracket, "Expected ']'")
+                .clone();
+            return Expression::ArrayExpression(Rc::new(ArrayExpression {
+                left_bracket,
+                right_bracket,
+                elements,
+            }));
         }
 
         // Struct literal
-        if self.advance_check(TokenType::LeftBrace) {
+        if self.check(TokenType::LeftBrace) {
+            let left_brace = self.advance().clone();
             let mut elements = Vec::new();
-            while !self.advance_check(TokenType::RightBrace) {
+            while !self.check(TokenType::RightBrace) {
                 // Key is identifier or String
                 let mut key = None;
                 if self.check(TokenType::Identifier) || self.check(TokenType::String) {
@@ -943,21 +1068,27 @@ impl<'ast> Parser<'ast> {
                 }
                 let value = self.expression();
                 elements.push((key.unwrap(), value));
-                if self.advance_check(TokenType::RightBrace) {
+                if self.check(TokenType::RightBrace) {
                     break;
                 }
                 self.consume(TokenType::Comma, "Expected ','");
             }
-            return Expression::StructExpression(Rc::new(StructExpression { elements }));
+            let right_brace = self.advance().clone();
+            return Expression::StructExpression(Rc::new(StructExpression {
+                left_brace,
+                right_brace,
+                elements,
+            }));
         }
 
         // Lambda expression
-        if self.advance_check(TokenType::LeftParen) {
+        if self.check(TokenType::LeftParen) {
+            let left_paren = self.advance().clone();
             if (self.check(TokenType::Identifier)
                 && (self.check_next(TokenType::Comma) || self.check_next(TokenType::RightParen)))
                 || self.check(TokenType::RightParen)
             {
-                let expression = self.lambda_expression();
+                let expression = self.lambda_expression(Some(left_paren));
                 return expression;
             }
 
@@ -970,7 +1101,7 @@ impl<'ast> Parser<'ast> {
         Expression::None
     }
 
-    fn lambda_expression(&mut self) -> Expression<'ast> {
+    fn lambda_expression(&mut self, left_paren: Option<Token<'ast>>) -> Expression<'ast> {
         // Consume params as comma separated identifiers
         let mut parameters = Vec::new();
 
@@ -979,27 +1110,40 @@ impl<'ast> Parser<'ast> {
                 self.consume(TokenType::Identifier, "Expected identifier")
                     .clone(),
             );
-            if self.advance_check(TokenType::RightParen) || self.advance_check(TokenType::Lambda) {
+            if self.check(TokenType::RightParen) || self.check(TokenType::Lambda) {
                 break;
             }
             self.consume(TokenType::Comma, "Expected ','");
         }
 
-        self.consume(TokenType::Lambda, "Expected '=>'");
+        let mut right_paren = None;
+        if self.check(TokenType::RightParen) {
+            right_paren = Some(self.advance().clone());
+        }
 
-        let body = self.consume_statement_block(true);
-        Expression::LambdaExpression(Rc::new(LambdaExpression { parameters, body }))
+        let lambda_token = self.consume(TokenType::Lambda, "Expected '=>'").clone();
+
+        let (body, left_brace, right_brace) = self.consume_statement_block(true);
+        Expression::LambdaExpression(Rc::new(LambdaExpression {
+            left_paren,
+            right_paren,
+            parameters,
+            lambda_token,
+            body,
+            left_brace,
+            right_brace,
+        }))
     }
 
     // Pass in function calling as expression, either identifier or array access usually
     // Processing function arguments
     fn function_call(&mut self, function: Expression<'ast>) -> Expression<'ast> {
-        self.consume(TokenType::LeftParen, "Expected '('");
+        let left_paren = self.consume(TokenType::LeftParen, "Expected '('").clone();
 
         // Function arguments, can be named, eg arg1 = "value"
         // Can be separate by commas or not,
         // cannot mix named and unnamed arguments
-        if !self.advance_check(TokenType::RightParen) {
+        if !self.check(TokenType::RightParen) {
             let mut arguments = Vec::new();
 
             loop {
@@ -1018,28 +1162,32 @@ impl<'ast> Parser<'ast> {
                 }
 
                 // If comma, keep parsing, or stop if encountered ')'
-                if !self.advance_check(TokenType::Comma)
-                    || self.advance_check(TokenType::RightParen)
-                {
+                if !self.advance_check(TokenType::Comma) || self.check(TokenType::RightParen) {
                     break;
                 }
             }
 
-            self.consume(TokenType::RightParen, "Expected ')'");
+            let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
 
             self.advance_check(TokenType::Semicolon);
 
             return Expression::FunctionCall(Rc::new(FunctionCall {
                 name: function,
                 args: arguments,
+                left_paren,
+                right_paren,
             }));
         }
+
+        let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
 
         self.advance_check(TokenType::Semicolon);
 
         return Expression::FunctionCall(Rc::new(FunctionCall {
             name: function,
             args: Vec::new(),
+            left_paren,
+            right_paren,
         }));
     }
 }

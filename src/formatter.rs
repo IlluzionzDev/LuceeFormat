@@ -211,7 +211,7 @@ impl Visitor for Formatter {
         let mut it = function_definition.parameters.iter().peekable();
 
         while let Some(param) = it.next() {
-            if param.required {
+            if param.required.is_some() {
                 self.formatted_source.push_str("required ");
             }
             match &param.param_type {
@@ -373,6 +373,7 @@ impl Visitor for Formatter {
                 init,
                 condition,
                 increment,
+                ..
             } => {
                 self.visit_expression(init);
                 self.formatted_source.push_str("; ");
@@ -380,7 +381,9 @@ impl Visitor for Formatter {
                 self.formatted_source.push_str("; ");
                 self.visit_expression(increment);
             }
-            ForControl::LoopOver { variable, array } => {
+            ForControl::LoopOver {
+                variable, array, ..
+            } => {
                 self.formatted_source.push_str(&variable.lexeme);
                 self.formatted_source.push_str(" in ");
                 self.visit_expression(array);
@@ -445,7 +448,7 @@ impl Visitor for Formatter {
                 match &case.condition {
                     Some(condition) => condition.iter().for_each(|condition| {
                         self.formatted_source.push_str("case ");
-                        self.visit_expression(condition);
+                        self.visit_expression(&condition.1);
                         self.formatted_source.push_str(":");
                         self.formatted_source.push('\n');
                     }),

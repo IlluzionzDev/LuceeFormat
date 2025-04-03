@@ -283,12 +283,15 @@ pub trait Visitor {
                 init,
                 condition,
                 increment,
+                ..
             } => {
                 self.visit_expression(init);
                 self.visit_expression(condition);
                 self.visit_expression(increment);
             }
-            ForControl::LoopOver { variable, array } => {
+            ForControl::LoopOver {
+                variable, array, ..
+            } => {
                 self.visit_expression(array);
             }
             _ => {}

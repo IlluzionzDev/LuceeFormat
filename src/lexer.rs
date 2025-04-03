@@ -117,6 +117,11 @@ pub struct Token<'a> {
     pub column: usize,
     pub end_column: usize,
     pub span: SourceSpan,
+    /// A comment token that might appear before this token.
+    /// This is how we handle wacky inline comments and preserve comments in the AST
+    /// This does mean in the AST we at minimum must store the tokens that make up
+    /// statements. For example 'if (condition)' would store the token for 'if', '(', 'condition', and ')'
+    pub comments: Option<Vec<Token<'a>>>,
 }
 
 /// Represents absolute position data of a token
@@ -136,6 +141,9 @@ pub(crate) struct Lexer<'a> {
     // Represent current index in line
     column: usize,
     end_column: usize,
+
+    // Current comments to append to next read token
+    pub pop_comments: Option<Vec<Token<'a>>>,
 }
 
 static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
@@ -203,8 +211,9 @@ impl<'a> Lexer<'a> {
             start: 0,
             current: 0,
             line: 1,
-            column: 0,
-            end_column: 0,
+            column: 1,
+            end_column: 1,
+            pop_comments: None,
         }
     }
 
@@ -228,6 +237,7 @@ impl<'a> Lexer<'a> {
                         start: self.start,
                         end: self.current,
                     },
+                    comments: None,
                 };
             }
 
@@ -339,19 +349,47 @@ impl<'a> Lexer<'a> {
                         while self.peek() != '\n' && !self.is_at_end() {
                             self.advance();
                         }
+
+                        let _ = &self.pop_comments.get_or_insert_with(Vec::new).push(Token {
+                            token_type: TokenType::Comment,
+                            lexeme: &self.source[self.start..self.current],
+                            line: self.line,
+                            column: self.column,
+                            end_column: self.end_column,
+                            span: SourceSpan {
+                                start: self.start,
+                                end: self.current,
+                            },
+                            comments: None,
+                        });
+
                         continue;
                         // return self.add_token(TokenType::Comment);
                     } else if self.match_char('*') {
                         while (self.peek() != '*' || self.peek_next() != '/') && !self.is_at_end() {
                             if self.peek() == '\n' {
                                 self.line += 1;
-                                self.column = 0;
-                                self.end_column = 0;
+                                self.column = 1;
+                                self.end_column = 1;
                             }
                             self.advance();
                         }
                         self.advance();
                         self.advance();
+
+                        let _ = &self.pop_comments.get_or_insert_with(Vec::new).push(Token {
+                            token_type: TokenType::Comment,
+                            lexeme: &self.source[self.start..self.current],
+                            line: self.line,
+                            column: self.column,
+                            end_column: self.end_column,
+                            span: SourceSpan {
+                                start: self.start,
+                                end: self.current,
+                            },
+                            comments: None,
+                        });
+
                         continue;
                         // return self.add_token(TokenType::Comment);
                     } else {
@@ -361,12 +399,16 @@ impl<'a> Lexer<'a> {
                 '"' | '\'' => return self.string(),
                 '0'..='9' => return self.number(),
                 'a'..='z' | 'A'..='Z' | '_' => return self.identifier(),
-                ' ' | '\r' | '\t' => continue,
+                '\t' => {
+                    // Tabs are 4 spaces, so add extra 3 onto the 1
+                    self.end_column += 3;
+                    continue;
+                }
+                '\r' | ' ' => continue,
                 '\n' => {
-                    // self.add_token(TokenType::NewLine);
                     self.line += 1;
-                    self.column = 0;
-                    self.end_column = 0;
+                    self.column = 1;
+                    self.end_column = 1;
                     continue;
                 }
                 _ => panic!(
@@ -405,7 +447,8 @@ impl<'a> Lexer<'a> {
         while (self.peek() != quote && !self.is_at_end()) || in_hash {
             if self.peek() == '\n' {
                 self.line += 1;
-                self.column = 0;
+                self.column = 1;
+                self.end_column = 1;
             }
             if self.peek() == '#' {
                 in_hash = !in_hash;
@@ -477,16 +520,26 @@ impl<'a> Lexer<'a> {
     }
 
     fn add_token_full(&mut self, token_type: TokenType, literal: &'a str) -> Token<'a> {
+        let mut comments = None;
+        match &self.pop_comments {
+            Some(pop) => {
+                // Pop comment off
+                comments = Some(pop.clone());
+                self.pop_comments = None;
+            }
+            _ => {}
+        }
         Token {
             token_type,
             lexeme: literal,
             line: self.line,
             column: self.column,
-            end_column: self.end_column,
+            end_column: self.end_column - 1,
             span: SourceSpan {
                 start: self.start,
                 end: self.current,
             },
+            comments,
         }
     }
 }
