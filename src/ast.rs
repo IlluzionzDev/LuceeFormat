@@ -34,7 +34,6 @@ pub enum Statement<'ast> {
     WhileStatement(Rc<WhileStatement<'ast>>),
     SwitchStatement(Rc<SwitchStatement<'ast>>),
     TryCatchStatement(Rc<TryCatchStatement<'ast>>),
-    CommentStatement(Rc<Comment<'ast>>),
 }
 
 impl<'ast> Walkable for Statement<'ast> {
@@ -191,7 +190,7 @@ impl<'ast> Walkable for LambdaExpression<'ast> {
 #[derive(Debug, Clone)]
 pub struct BinaryExpression<'ast> {
     pub left: Expression<'ast>,
-    pub op: BinaryOperator,
+    pub op: Token<'ast>,
     pub right: Expression<'ast>,
 }
 
@@ -203,7 +202,7 @@ impl<'ast> Walkable for BinaryExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct UnaryExpression<'ast> {
-    pub op: UnaryOperator,
+    pub op: Token<'ast>,
     pub expr: Expression<'ast>,
 }
 
@@ -216,7 +215,9 @@ impl<'ast> Walkable for UnaryExpression<'ast> {
 #[derive(Debug, Clone)]
 pub struct TernaryExpression<'ast> {
     pub condition: Expression<'ast>,
+    pub question_token: Token<'ast>,
     pub true_expr: Expression<'ast>,
+    pub colon_token: Token<'ast>,
     pub false_expr: Expression<'ast>,
 }
 
@@ -228,7 +229,9 @@ impl<'ast> Walkable for TernaryExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct GroupExpression<'ast> {
+    pub left_paren: Token<'ast>,
     pub expr: Expression<'ast>,
+    pub right_paren: Token<'ast>,
 }
 
 impl<'ast> Walkable for GroupExpression<'ast> {
@@ -240,6 +243,7 @@ impl<'ast> Walkable for GroupExpression<'ast> {
 #[derive(Debug, Clone)]
 pub struct MemberAccess<'ast> {
     pub object: Expression<'ast>,
+    pub dot_token: Token<'ast>,
     pub property: Expression<'ast>,
 }
 
@@ -252,7 +256,9 @@ impl<'ast> Walkable for MemberAccess<'ast> {
 #[derive(Debug, Clone)]
 pub struct IndexAccess<'ast> {
     pub object: Expression<'ast>,
+    pub left_bracket: Token<'ast>,
     pub index: Expression<'ast>,
+    pub right_bracket: Token<'ast>,
 }
 
 impl<'ast> Walkable for IndexAccess<'ast> {
@@ -531,9 +537,4 @@ impl<'ast> Walkable for TryCatchStatement<'ast> {
     fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
         visitor.visit_try_catch_statement(self);
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct Comment<'ast> {
-    pub content: Token<'ast>,
 }

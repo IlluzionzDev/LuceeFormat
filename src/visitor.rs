@@ -110,8 +110,6 @@ pub trait Visitor {
         self.walk_try_catch_statement(try_catch_statement)
     }
 
-    fn visit_comment_statement(&mut self, comment_statement: &crate::ast::Comment) {}
-
     /// Walk method stubs for each AST node
     /// Some AST nodes have direct AST node children (e.g Component has list of statements) that
     /// by default need to be walked. Some nodes are terminal or don't have easy direct children, so those
@@ -148,9 +146,6 @@ pub trait Visitor {
             }
             Statement::TryCatchStatement(try_catch_statement) => {
                 self.visit_try_catch_statement(try_catch_statement)
-            }
-            Statement::CommentStatement(comment_statement) => {
-                self.visit_comment_statement(comment_statement)
             }
         }
     }

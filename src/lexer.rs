@@ -1,3 +1,4 @@
+use crate::ast::{BinaryOperator, UnaryOperator};
 use phf::phf_map;
 use std::collections::HashMap;
 
@@ -129,6 +130,55 @@ pub struct Token<'a> {
 pub struct SourceSpan {
     pub start: usize,
     pub end: usize,
+}
+
+impl Token<'_> {
+    pub fn to_binary_op(&self) -> BinaryOperator {
+        match self.token_type {
+            TokenType::EqualEqual => BinaryOperator::Equal,
+            TokenType::BangEqual => BinaryOperator::NotEqual,
+            TokenType::Eq => BinaryOperator::Eq,
+            TokenType::Neq => BinaryOperator::Neq,
+
+            TokenType::Less => BinaryOperator::Less,
+            TokenType::Greater => BinaryOperator::Greater,
+            TokenType::LessEqual => BinaryOperator::LessEqual,
+            TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
+            TokenType::Lt => BinaryOperator::Lt,
+            TokenType::Gt => BinaryOperator::Gt,
+            TokenType::AmpersandAmpersand => BinaryOperator::And,
+            TokenType::PipePipe => BinaryOperator::Or,
+            TokenType::And => BinaryOperator::LogicalAnd,
+            TokenType::Or => BinaryOperator::LogicalOr,
+            TokenType::Contains => BinaryOperator::Contains,
+            TokenType::Xor => BinaryOperator::Xor,
+
+            TokenType::Plus => BinaryOperator::Add,
+            TokenType::Minus => BinaryOperator::Subtract,
+            TokenType::Ampersand => BinaryOperator::StringConcat,
+            TokenType::PlusEqual => BinaryOperator::PlusEqual,
+            TokenType::MinusEqual => BinaryOperator::MinusEqual,
+            TokenType::AmpersandEqual => BinaryOperator::ConcatEqual,
+
+            TokenType::Star => BinaryOperator::Multiply,
+            TokenType::Slash => BinaryOperator::Divide,
+            TokenType::StarEqual => BinaryOperator::MultiplyEqual,
+            TokenType::SlashEqual => BinaryOperator::DivideEqual,
+            _ => {
+                panic!("Token {:?} is not a valid binary operator", self.token_type);
+            }
+        }
+    }
+
+    pub fn to_unary_op(&self) -> UnaryOperator {
+        match self.token_type {
+            TokenType::Minus => UnaryOperator::Negate,
+            TokenType::Bang => UnaryOperator::Not,
+            _ => {
+                panic!("Token {:?} is not a valid unary operator", self.token_type);
+            }
+        }
+    }
 }
 
 pub(crate) struct Lexer<'a> {

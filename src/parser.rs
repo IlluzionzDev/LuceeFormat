@@ -1,6 +1,6 @@
 use crate::ast::Expression::Literal as ExpLiteral;
 use crate::ast::{
-    AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement, Comment,
+    AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement,
     ComponentDefinition, Expression, ForControl, ForStatement, FunctionCall, FunctionDefinition,
     GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal, LiteralValue,
     LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement, Statement,
@@ -187,10 +187,6 @@ impl<'ast> Parser<'ast> {
             return self.try_catch_statement();
         }
 
-        if self.check(TokenType::Comment) {
-            return self.comment();
-        }
-
         // Expression Statement
         let expression = self.expression();
 
@@ -213,11 +209,7 @@ impl<'ast> Parser<'ast> {
             return Statement::ExpressionStmt(Rc::new(Expression::BinaryExpression(Rc::new(
                 BinaryExpression {
                     left: expression,
-                    op: match op.token_type {
-                        TokenType::PlusPlus => BinaryOperator::PlusPlus,
-                        TokenType::MinusMinus => BinaryOperator::MinusMinus,
-                        _ => BinaryOperator::PlusEqual,
-                    },
+                    op: op.clone(),
                     right: Expression::Literal(Rc::new(Literal {
                         value: LiteralValue::Number(1.0),
                         token: op.clone(),
@@ -234,11 +226,6 @@ impl<'ast> Parser<'ast> {
         }
 
         Statement::ExpressionStmt(Rc::new(expression))
-    }
-
-    fn comment(&mut self) -> Statement<'ast> {
-        let comment = self.advance().clone();
-        Statement::CommentStatement(Rc::new(Comment { content: comment }))
     }
 
     fn variable_declaration(&mut self) -> Statement<'ast> {
@@ -768,13 +755,16 @@ impl<'ast> Parser<'ast> {
     fn ternary(&mut self) -> Expression<'ast> {
         let mut expression = self.equality();
 
-        if self.advance_check(TokenType::Question) {
+        if self.check(TokenType::Question) {
+            let question_token = self.advance().clone();
             let true_expr = self.expression();
-            self.consume(TokenType::Colon, "Expected ':'");
+            let colon_token = self.consume(TokenType::Colon, "Expected ':'").clone();
             let false_expr = self.expression();
             expression = Expression::TernaryExpression(Rc::new(TernaryExpression {
                 condition: expression,
+                question_token,
                 true_expr,
+                colon_token,
                 false_expr,
             }));
         }
@@ -790,17 +780,11 @@ impl<'ast> Parser<'ast> {
             || self.check(TokenType::Eq)
             || self.check(TokenType::Neq)
         {
-            let operator = self.advance().token_type;
+            let op = self.advance().clone();
             let right = self.comparison();
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
-                op: match operator {
-                    TokenType::EqualEqual => BinaryOperator::Equal,
-                    TokenType::BangEqual => BinaryOperator::NotEqual,
-                    TokenType::Eq => BinaryOperator::Eq,
-                    TokenType::Neq => BinaryOperator::Neq,
-                    _ => BinaryOperator::Equal,
-                },
+                op,
                 right,
             }));
         }
@@ -824,25 +808,11 @@ impl<'ast> Parser<'ast> {
             || self.check(TokenType::Contains)
             || self.check(TokenType::Xor)
         {
-            let operator = self.advance().token_type;
+            let op = self.advance().clone();
             let right = self.term();
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
-                op: match operator {
-                    TokenType::Less => BinaryOperator::Less,
-                    TokenType::Greater => BinaryOperator::Greater,
-                    TokenType::LessEqual => BinaryOperator::LessEqual,
-                    TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
-                    TokenType::Lt => BinaryOperator::Lt,
-                    TokenType::Gt => BinaryOperator::Gt,
-                    TokenType::AmpersandAmpersand => BinaryOperator::And,
-                    TokenType::PipePipe => BinaryOperator::Or,
-                    TokenType::And => BinaryOperator::LogicalAnd,
-                    TokenType::Or => BinaryOperator::LogicalOr,
-                    TokenType::Contains => BinaryOperator::Contains,
-                    TokenType::Xor => BinaryOperator::Xor,
-                    _ => BinaryOperator::Less,
-                },
+                op,
                 right,
             }));
         }
@@ -860,19 +830,11 @@ impl<'ast> Parser<'ast> {
             || self.check(TokenType::MinusEqual)
             || self.check(TokenType::AmpersandEqual)
         {
-            let operator = self.advance().token_type;
+            let op = self.advance().clone();
             let right = self.factor();
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
-                op: match operator {
-                    TokenType::Plus => BinaryOperator::Add,
-                    TokenType::Minus => BinaryOperator::Subtract,
-                    TokenType::Ampersand => BinaryOperator::StringConcat,
-                    TokenType::PlusEqual => BinaryOperator::PlusEqual,
-                    TokenType::MinusEqual => BinaryOperator::MinusEqual,
-                    TokenType::AmpersandEqual => BinaryOperator::ConcatEqual,
-                    _ => BinaryOperator::Add,
-                },
+                op,
                 right,
             }));
         }
@@ -888,17 +850,11 @@ impl<'ast> Parser<'ast> {
             || self.check(TokenType::StarEqual)
             || self.check(TokenType::SlashEqual)
         {
-            let operator = self.advance().token_type;
+            let op = self.advance().clone();
             let right = self.unary();
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
-                op: match operator {
-                    TokenType::Star => BinaryOperator::Multiply,
-                    TokenType::Slash => BinaryOperator::Divide,
-                    TokenType::StarEqual => BinaryOperator::MultiplyEqual,
-                    TokenType::SlashEqual => BinaryOperator::DivideEqual,
-                    _ => BinaryOperator::Multiply,
-                },
+                op,
                 right,
             }));
         }
@@ -909,16 +865,9 @@ impl<'ast> Parser<'ast> {
     fn unary(&mut self) -> Expression<'ast> {
         // Unary operator - or !
         if self.check(TokenType::Minus) || self.check(TokenType::Bang) {
-            let operator = self.advance().token_type;
+            let op = self.advance().clone();
             let right = self.dot_access();
-            return Expression::UnaryExpression(Rc::new(UnaryExpression {
-                op: match operator {
-                    TokenType::Minus => UnaryOperator::Negate,
-                    TokenType::Bang => UnaryOperator::Not,
-                    _ => UnaryOperator::Negate,
-                },
-                expr: right,
-            }));
+            return Expression::UnaryExpression(Rc::new(UnaryExpression { op, expr: right }));
         }
 
         self.dot_access()
@@ -927,10 +876,12 @@ impl<'ast> Parser<'ast> {
     fn dot_access(&mut self) -> Expression<'ast> {
         let mut expression = self.index_access();
 
-        while self.advance_check(TokenType::Dot) {
+        while self.check(TokenType::Dot) {
+            let dot_token = self.advance().clone();
             let property = self.index_access();
             expression = Expression::MemberAccess(Rc::new(MemberAccess {
                 object: expression,
+                dot_token,
                 property,
             }));
         }
@@ -941,12 +892,17 @@ impl<'ast> Parser<'ast> {
     fn index_access(&mut self) -> Expression<'ast> {
         let mut expression = self.primary();
 
-        while self.advance_check(TokenType::LeftBracket) {
+        while self.check(TokenType::LeftBracket) {
+            let left_bracket = self.advance().clone();
             let index = self.expression();
-            self.consume(TokenType::RightBracket, "Expected ']'");
+            let right_bracket = self
+                .consume(TokenType::RightBracket, "Expected ']'")
+                .clone();
             expression = Expression::IndexAccess(Rc::new(IndexAccess {
                 object: expression,
                 index,
+                left_bracket,
+                right_bracket,
             }));
         }
 
@@ -1094,8 +1050,12 @@ impl<'ast> Parser<'ast> {
 
             // Finally, group back to expression
             let expression = self.expression();
-            self.consume(TokenType::RightParen, "Expected ')'");
-            return Expression::GroupExpression(Rc::new(GroupExpression { expr: expression }));
+            let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
+            return Expression::GroupExpression(Rc::new(GroupExpression {
+                expr: expression,
+                left_paren,
+                right_paren,
+            }));
         }
 
         Expression::None
