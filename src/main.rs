@@ -8,12 +8,22 @@ mod lexer;
 mod parser;
 mod visitor;
 
+struct Diagnostics;
+impl crate::visitor::Visitor for Diagnostics {
+    fn visit_function_definition(&mut self, function_definition: &crate::ast::FunctionDefinition) {
+        println!(
+            "Function Definition Access Modifier: {:?}",
+            function_definition.access_modifier_token
+        );
+    }
+}
+
 fn main() {
     // Start time
     let start_file = std::time::Instant::now();
 
     // Read in test.cfm into a string
-    let source = std::fs::read_to_string("test/GenericDAO.cfc").unwrap();
+    let source = std::fs::read_to_string("test/test.cfc").unwrap();
 
     let end_file = start_file.elapsed().as_micros();
 
@@ -38,6 +48,10 @@ fn main() {
     };
     ast.walk(&mut formatter);
     let traverse_end = traverse_start.elapsed().as_micros();
+
+    // Diagnostics on AST for debugging
+    let mut diagnostics = Diagnostics {};
+    ast.walk(&mut diagnostics);
 
     let write_start = std::time::Instant::now();
 

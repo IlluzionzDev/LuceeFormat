@@ -14,6 +14,85 @@ impl Formatter {
             self.formatted_source.push_str("    ");
         }
     }
+
+    /// Formats / pops comment on this token. Handles formatting indents, by stripping out newlines
+    fn pop_comment(&mut self, token: &Token) {
+        let comment = &token.comments;
+        if comment.is_some() {
+            comment.clone().unwrap().iter().for_each(|comment| {
+                let formatted_comment = self.format_comment(&comment.lexeme);
+                for line in formatted_comment.lines() {
+                    self.add_current_indent();
+                    self.formatted_source.push_str(line.trim_end());
+                    self.formatted_source.push('\n');
+                }
+                // self.add_current_indent();
+                // self.formatted_source.push_str(&comment.lexeme);
+            });
+        }
+    }
+
+    fn format_comment(&self, raw: &str) -> String {
+        if raw.trim_start().starts_with("/*") {
+            self.format_block_comment(raw)
+        } else if raw.trim_start().starts_with("//") {
+            raw.lines()
+                .map(|line| line.trim_start().to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            raw.to_string()
+        }
+    }
+
+    fn format_block_comment(&self, raw: &str) -> String {
+        let content = raw.trim().trim_start_matches("/*").trim_end_matches("*/");
+
+        // Collect non-empty lines and normalize indent
+        let lines: Vec<&str> = content.lines().collect();
+
+        // Strip leading and trailing blank lines
+        let lines = lines
+            .into_iter()
+            .skip_while(|line| line.trim().is_empty())
+            .collect::<Vec<_>>();
+
+        let lines = lines
+            .into_iter()
+            .rev()
+            .skip_while(|line| line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>();
+
+        // Compute minimum common indentation (ignoring blank lines)
+        let min_indent = lines
+            .iter()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.chars().take_while(|c| c.is_whitespace()).count())
+            .min()
+            .unwrap_or(0);
+
+        // Remove min_indent from each line
+        let cleaned: Vec<String> = lines
+            .iter()
+            .map(|line| line.chars().skip(min_indent).collect::<String>())
+            .collect();
+
+        let mut result = String::new();
+        result.push_str("/*\n");
+
+        for (i, line) in cleaned.iter().enumerate() {
+            result.push_str("  ");
+            result.push_str(line.trim_end());
+            result.push('\n');
+        }
+
+        result.push_str("*/");
+
+        result
+    }
 }
 
 impl Visitor for Formatter {
@@ -182,6 +261,7 @@ impl Visitor for Formatter {
     fn visit_function_definition(&mut self, function_definition: &crate::ast::FunctionDefinition) {
         match &function_definition.access_modifier {
             Some(access_modifier) => {
+                self.pop_comment(&function_definition.access_modifier_token.clone().unwrap());
                 match access_modifier {
                     AccessModifier::Public => self.formatted_source.push_str("public"),
                     AccessModifier::Private => self.formatted_source.push_str("private"),
