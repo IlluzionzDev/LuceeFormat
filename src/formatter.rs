@@ -22,12 +22,11 @@ impl Formatter {
             comment.clone().unwrap().iter().for_each(|comment| {
                 let formatted_comment = self.format_comment(&comment.lexeme);
                 for line in formatted_comment.lines() {
-                    self.add_current_indent();
                     self.formatted_source.push_str(line.trim_end());
                     self.formatted_source.push('\n');
                 }
-                // self.add_current_indent();
-                // self.formatted_source.push_str(&comment.lexeme);
+                // Add current indent after printing comment, so normal code can continue being printed
+                self.add_current_indent();
             });
         }
     }
@@ -81,14 +80,23 @@ impl Formatter {
             .collect();
 
         let mut result = String::new();
+        // Indent already printed before this char
         result.push_str("/*\n");
 
         for (i, line) in cleaned.iter().enumerate() {
+            // Add current indent before every line
+            for _ in 0..self.indent_level {
+                result.push_str("    ");
+            }
             result.push_str("  ");
             result.push_str(line.trim_end());
             result.push('\n');
         }
 
+        // Print closing char with indent
+        for _ in 0..self.indent_level {
+            result.push_str("    ");
+        }
         result.push_str("*/");
 
         result
