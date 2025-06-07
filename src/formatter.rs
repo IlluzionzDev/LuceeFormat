@@ -45,7 +45,15 @@ impl Formatter {
     }
 
     fn format_block_comment(&self, raw: &str) -> String {
-        let content = raw.trim().trim_start_matches("/*").trim_end_matches("*/");
+        let trimmed = raw.trim();
+
+        // Handle inline single-line block comment
+        if !trimmed.contains('\n') {
+            // Just return with correct indent
+            return format!("{}", trimmed);
+        }
+
+        let content = trimmed.trim_start_matches("/*").trim_end_matches("*/");
 
         // Collect non-empty lines and normalize indent
         let lines: Vec<&str> = content.lines().collect();
