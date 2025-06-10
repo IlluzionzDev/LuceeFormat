@@ -45,6 +45,7 @@ impl<'ast> Parser<'ast> {
                 lexeme: "",
                 span: SourceSpan { start: 0, end: 0 },
                 comments: None,
+                lines_before: 0,
             },
             lex_time: 0,
         }
