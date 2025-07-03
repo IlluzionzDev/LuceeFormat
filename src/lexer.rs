@@ -124,7 +124,7 @@ pub struct Token<'a> {
     /// This does mean in the AST we at minimum must store the tokens that make up
     /// statements. For example 'if (condition)' would store the token for 'if', '(', 'condition', and ')'
     pub comments: Option<Vec<Token<'a>>>,
-    pub lines_before: usize, // Amount of blank lines (\n\n) before this token, used for collapsing whitespace
+    pub lines_before: i8, // Amount of blank lines (\n\n) before this token, used for collapsing whitespace
 }
 
 /// Represents absolute position data of a token
@@ -198,7 +198,7 @@ pub(crate) struct Lexer<'a> {
     pub pop_comments: Option<Vec<Token<'a>>>,
 
     // Keep track of new lines to attach to token info
-    pub pop_lines: usize,
+    pub pop_lines: i8,
 }
 
 static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {

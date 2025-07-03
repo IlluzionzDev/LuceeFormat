@@ -13,10 +13,15 @@ complex rules, and just runs through tokens in microseconds.
 
 # Dev TODO
 
-- [ ] Preserve comments/whitespace in AST
+- [X] Preserve comments/whitespace in AST
 - [ ] Properly handle breaking lines while formatting
+-   [ ] Determine inline-ness of comments when wrapping
 - [ ] Parse AST into a pretty printer
 - [ ] Better error handling
-- [ ] Support parsing/formatting .cfm files with <cfscript> blocks
 - [ ] Robust tests
 - [ ] (Future) Add linting capabilities
+
+## Rough Current Todos
+
+- Print comments on closing { correctly with indent
+- Line breaks with '// comments' as "inline" comments should preserve line breaks

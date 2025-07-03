@@ -45,13 +45,14 @@ fn main() {
     let mut formatter = formatter::Formatter {
         formatted_source: String::new(),
         indent_level: 0,
+        inline_comment: false,
     };
     ast.walk(&mut formatter);
     let traverse_end = traverse_start.elapsed().as_micros();
 
     // Diagnostics on AST for debugging
     let mut diagnostics = Diagnostics {};
-    ast.walk(&mut diagnostics);
+    // ast.walk(&mut diagnostics);
 
     let write_start = std::time::Instant::now();
 

@@ -86,6 +86,8 @@ pub struct LuceeFunction<'ast> {
     pub name: Token<'ast>,
     pub attributes: Vec<(Token<'ast>, Expression<'ast>)>,
     pub body: Option<Vec<Statement<'ast>>>,
+    pub left_brace: Option<Token<'ast>>,
+    pub right_brace: Option<Token<'ast>>,
 }
 
 impl<'ast> Walkable for LuceeFunction<'ast> {
@@ -424,10 +426,16 @@ pub struct Parameter<'ast> {
 #[derive(Debug, Clone)]
 pub struct IfStatement<'ast> {
     pub if_token: Token<'ast>,
+    pub left_paren: Token<'ast>,
+    pub right_paren: Token<'ast>,
     pub condition: Expression<'ast>,
     pub body: Vec<Statement<'ast>>,
+    pub left_brace: Option<Token<'ast>>,
+    pub right_brace: Option<Token<'ast>>,
     // Potentially contains another if statement
     pub else_body: Option<Vec<Statement<'ast>>>,
+    pub else_left_brace: Option<Token<'ast>>,
+    pub else_right_brace: Option<Token<'ast>>,
     pub else_token: Option<Token<'ast>>,
 }
 
@@ -453,8 +461,9 @@ pub struct ForStatement<'ast> {
 pub enum ForControl<'ast> {
     Increment {
         var_token: Option<Token<'ast>>,
-        init: Expression<'ast>,
+        variable: Token<'ast>,
         equals_token: Token<'ast>,
+        init: Expression<'ast>,
         condition: Expression<'ast>,
         increment: Expression<'ast>,
     },
@@ -506,7 +515,7 @@ pub struct SwitchStatement<'ast> {
 pub struct CaseStatement<'ast> {
     pub is_default: bool,
     // List of conditions (case/default token, expression (option as default omits this), colon token)
-    pub condition: Option<Vec<(Token<'ast>, Expression<'ast>, Token<'ast>)>>,
+    pub condition: Vec<(Token<'ast>, Expression<'ast>, Token<'ast>)>,
     pub body: Vec<Statement<'ast>>,
 }
 

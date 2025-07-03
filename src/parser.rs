@@ -206,7 +206,8 @@ impl<'ast> Parser<'ast> {
         // Shorthand increments, ++ or --
         // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
         if self.check(TokenType::PlusPlus) || self.check(TokenType::MinusMinus) {
-            let op = self.advance();
+            let op = self.advance().clone();
+            self.advance_check(TokenType::Semicolon);
             return Statement::ExpressionStmt(Rc::new(Expression::BinaryExpression(Rc::new(
                 BinaryExpression {
                     left: expression,
@@ -260,6 +261,7 @@ impl<'ast> Parser<'ast> {
         Option<Token<'ast>>,
         Option<Token<'ast>>,
     ) {
+        // TODO: If consuming no statements but with {}, return {} tokens
         let mut has_braces = false;
         let mut left_brace = None;
         let mut right_brace = None;
@@ -276,7 +278,7 @@ impl<'ast> Parser<'ast> {
         }
 
         let mut body = Vec::new();
-        while !self.advance_check(TokenType::RightBrace) {
+        while !self.check(TokenType::RightBrace) {
             body.push(self.statement());
             // Only consume one statement if no braces
             if self.check(TokenType::RightBrace) || !has_braces {
@@ -401,7 +403,7 @@ impl<'ast> Parser<'ast> {
      *
      * lock name="myLock" type="exclusive" timeout="10" {
      *
-     * {
+     * }
      *
      * "Calling" a function like a statement with an attribute list
      */
@@ -413,8 +415,13 @@ impl<'ast> Parser<'ast> {
         let attributes = self.attribute_definitions();
 
         let mut body = None;
+        let mut left_brace = None;
+        let mut right_brace = None;
         if !self.check(TokenType::Semicolon) {
-            body = Some(self.consume_statement_block(true).0);
+            let statement_block = self.consume_statement_block(true);
+            body = Some(statement_block.0);
+            left_brace = statement_block.1;
+            right_brace = statement_block.2;
         }
 
         self.advance_check(TokenType::Semicolon);
@@ -423,6 +430,8 @@ impl<'ast> Parser<'ast> {
             name,
             attributes,
             body,
+            left_brace,
+            right_brace,
         }))
     }
 
@@ -459,32 +468,45 @@ impl<'ast> Parser<'ast> {
 
     fn if_statement(&mut self) -> Statement<'ast> {
         let if_token = self.consume(TokenType::If, "Expected 'if' keyword").clone();
-        self.consume(TokenType::LeftParen, "Expected '('");
+        let left_paren = self.consume(TokenType::LeftParen, "Expected '('").clone();
 
         let condition = self.expression();
 
-        self.consume(TokenType::RightParen, "Expected ')'");
+        let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
 
-        let (body, _, _) = self.consume_statement_block(true);
+        let (body, left_brace, right_brace) = self.consume_statement_block(true);
 
         let mut else_body = None;
         let mut else_token = None;
+        let mut else_left_brace = None;
+        let mut else_right_brace = None;
         if self.check(TokenType::Else) {
             else_token = Some(self.advance().clone());
             if self.check(TokenType::If) {
                 // Else body is another IF statement
                 else_body = Some(vec![self.if_statement()]);
             } else {
+                // TODO: Probably a cleaner way to do this
                 // Else body is consumed statements
-                else_body = Some(self.consume_statement_block(true).0);
+                let (_else_body, _else_left_brace, _else_right_brace) =
+                    self.consume_statement_block(true);
+                else_body = Some(_else_body);
+                else_left_brace = _else_left_brace;
+                else_right_brace = _else_right_brace;
             }
         }
 
         Statement::IfStatement(Rc::new(IfStatement {
             if_token,
+            left_paren,
+            right_paren,
             condition,
             body,
+            left_brace,
+            right_brace,
             else_body,
+            else_left_brace,
+            else_right_brace,
             else_token,
         }))
     }
@@ -543,6 +565,7 @@ impl<'ast> Parser<'ast> {
                 right_paren,
                 control: ForControl::Increment {
                     var_token,
+                    variable: name,
                     init,
                     equals_token,
                     condition,
@@ -667,6 +690,8 @@ impl<'ast> Parser<'ast> {
                     name: break_statement,
                     attributes: Vec::new(),
                     body: None,
+                    left_brace: None,
+                    right_brace: None,
                 })));
             } else if self.check(TokenType::Return) {
                 // Push return statement
@@ -675,7 +700,7 @@ impl<'ast> Parser<'ast> {
 
             cases.push(CaseStatement {
                 is_default,
-                condition: if is_default { None } else { Some(condition) },
+                condition,
                 body,
             });
         }
