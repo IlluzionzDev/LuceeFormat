@@ -1,5 +1,6 @@
 #![feature(associated_type_defaults)]
 
+use crate::formatter::Formatter;
 use crate::visitor::Walkable;
 
 mod ast;
@@ -23,7 +24,7 @@ fn main() {
     let start_file = std::time::Instant::now();
 
     // Read in test.cfm into a string
-    let source = std::fs::read_to_string("test/test.cfc").unwrap();
+    let source = std::fs::read_to_string("test/GenericDAO.cfc").unwrap();
 
     let end_file = start_file.elapsed().as_micros();
 
@@ -42,11 +43,7 @@ fn main() {
     // }
 
     let traverse_start = std::time::Instant::now();
-    let mut formatter = formatter::Formatter {
-        formatted_source: String::new(),
-        indent_level: 0,
-        inline_comment: false,
-    };
+    let mut formatter = Formatter::new();
     ast.walk(&mut formatter);
     let traverse_end = traverse_start.elapsed().as_micros();
 

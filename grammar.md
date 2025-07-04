@@ -24,8 +24,7 @@
 // & for string concatenation grouped for here ease
 <term> ::= <factor> (( "+" | "-" | "+=" | "-=" | "&" | "&=" ) <factor>)* | <factor>
 
-// TODO: ^ operator
-<factor> ::= <unary> (( "*" | "/" | "*=" | "/=" ) <unary>)* | <unary>
+<factor> ::= <unary> (( "*" | "/" | "*=" | "/=" | '^' ) <unary>)* | <unary>
 
 <unary> ::= ( "!" | "-" ) <unary> | <dot_access>
 
@@ -56,14 +55,14 @@
 
 <variable_declaration> ::= "var" <identifier> "=" <expression> ";"?
 
-// TODO: Short hand assignments, +=, -=, /=, *=, ++, --, &=
 <variable_assignment> ::= <expression> "=" <expression> ";"?
 
 <return_statement> ::= "return" <expression> ";"?
 
 <object_creation> ::= "new" <expression>
 
-<function_definition> ::= <access_modifier>? <identifier> "function" <identifier> "(" <parameter_list> ")" "{" <statement_list> "}"
+<function_definition> ::= <access_modifier>? <identifier> "function" <identifier> "(" <parameter_list> ")" "{" <
+statement_list> "}"
 
 // Special lucee functions like
 // transaction {
@@ -88,7 +87,8 @@
 
 <key_value_pair> ::= <literal> (":" || "=") <expression>
 
-<lambda_expression> ::= ("(" <identifier> ("," <identifier>)* ")" | <identifier>) "=>" (<statement_list> | "{" <statement_list> "}" )
+<lambda_expression> ::= ("(" <identifier> ("," <identifier>)* ")" | <identifier>) "=>" (<statement_list> | "{" <
+statement_list> "}" )
 
 <control_structure> ::= <if_statement>
 | <loop_statement>
@@ -99,7 +99,8 @@
 
 <else_clause> ::= "else" "{" <statement_list> "}" | ε
 
-<loop_statement> ::= "for" "(" (<expression> ";" <expression> ";" <expression> | <identifier> "in" <expression>) ")" "{" <statement_list> "}"
+<loop_statement> ::= "for" "(" (<expression> ";" <expression> ";" <expression> | <identifier> "
+in" <expression>) ")" "{" <statement_list> "}"
 | "while" "(" <expression> ")" "{" <statement_list> "}"
 | "do" "{" <statement_list> "}" "while" "(" <expression> ")" ";"
 
@@ -114,5 +115,6 @@
 <loop_attribute_list> ::= <identifier> "=" <expression> | <identifier> "=" <expression> " " <loop_attribute_list>
 
 # Handle comments for formatting / linting
+
 <comment> ::= "/*" <comment_body> "*/" | "//" <comment_body> | "<!--" <comment_body> "-->"
 <comment_body> ::= (<character>)*

@@ -7,16 +7,41 @@ pub struct Formatter {
 
     pub indent_level: usize,
 
-    // Indicates when printing comments, if should print inline
-    // Mostly useful for tokens / expressions that may or not be inline
-    pub(crate) inline_comment: bool,
+    /// Indicates that we are at the beginning of a statement. Useful for expressions
+    /// that may or may not be starting statements. Should be manually switched while formatting
+    pub beginning_statement: bool,
+
+    /// Flag can be set to true to ignore popping whitespace
+    /// for the next call. For instance set to true when starting to print body
+    /// of a function, to ensure the first statement has no whitespace before it.
+    /// Once #pop_whitespace is called, this flag is reset to false.
+    pub collapse_whitespace: bool,
 }
 
 impl Formatter {
+    pub fn new() -> Self {
+        Self {
+            formatted_source: String::new(),
+            indent_level: 0,
+            beginning_statement: true,
+            collapse_whitespace: true,
+        }
+    }
+
     fn add_current_indent(&mut self) {
         for _ in 0..self.indent_level {
             self.formatted_source.push_str("    ");
         }
+    }
+
+    /// Process lines before on a token, and prints 1 newline if there was a blank whitespace
+    fn pop_whitespace(&mut self, token: &Token) {
+        let blank_lines = token.lines_before;
+        if blank_lines > 0 && !self.collapse_whitespace && self.beginning_statement {
+            self.formatted_source.push('\n');
+            self.add_current_indent();
+        }
+        self.collapse_whitespace = false; // Reset after printing
     }
 
     /// Utility function for popping comments on closing braces
@@ -41,6 +66,7 @@ impl Formatter {
         // Comments always printed one after the other, no space in between
         if comment.is_some() {
             comment.clone().unwrap().iter().for_each(|comment| {
+                self.pop_whitespace(&comment);
                 let formatted_comment = self.format_comment(&comment.lexeme);
                 for line in formatted_comment.lines() {
                     self.formatted_source.push_str(line.trim_end());
@@ -57,10 +83,6 @@ impl Formatter {
                 }
             });
         }
-
-        // Auto set remaining comments to inline
-        // Must be manually reset
-        self.inline_comment = true;
     }
 
     fn format_comment(&self, raw: &str) -> String {
@@ -76,6 +98,8 @@ impl Formatter {
         }
     }
 
+    // TODO: Only first line is indented correctly, rest indented one too much
+    // ^ I think happens when java doc comments
     fn format_block_comment(&self, raw: &str) -> String {
         let trimmed = raw.trim();
 
@@ -146,12 +170,15 @@ impl Formatter {
 impl Visitor for Formatter {
     fn visit_statement(&mut self, statement: &Statement) {
         // At every new statement, reset inline comment
-        self.inline_comment = false;
+        self.beginning_statement = true;
         self.walk_statement(statement);
     }
 
     fn visit_literal(&mut self, literal: &crate::ast::Literal) {
-        self.pop_comment(&literal.token, self.inline_comment);
+        self.pop_whitespace(&literal.token);
+        self.pop_comment(&literal.token, !self.beginning_statement);
+        self.beginning_statement = false;
+
         let literal_value = &literal.value;
         let value = match literal_value {
             LiteralValue::Number(number) => number.to_string(),
@@ -162,7 +189,9 @@ impl Visitor for Formatter {
         self.formatted_source.push_str(&value);
     }
     fn visit_identifier(&mut self, identifier: &Token) {
-        self.pop_comment(identifier, self.inline_comment);
+        self.pop_whitespace(identifier);
+        self.pop_comment(identifier, !self.beginning_statement);
+        self.beginning_statement = false;
         self.formatted_source.push_str(&identifier.lexeme);
     }
     fn visit_function_call(&mut self, function_call: &crate::ast::FunctionCall) {
@@ -193,12 +222,18 @@ impl Visitor for Formatter {
         self.formatted_source.push(')');
     }
     fn visit_object_creation(&mut self, object_creation: &crate::ast::ObjectCreation) {
-        self.pop_comment(&object_creation.new_token, self.inline_comment);
+        self.pop_whitespace(&object_creation.new_token);
+        self.pop_comment(&object_creation.new_token, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("new ");
         self.visit_expression(&object_creation.expr);
     }
     fn visit_array_expression(&mut self, array_expression: &crate::ast::ArrayExpression) {
-        self.pop_comment(&array_expression.left_bracket, self.inline_comment);
+        self.pop_whitespace(&array_expression.left_bracket);
+        self.pop_comment(&array_expression.left_bracket, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push('[');
 
         let mut it = array_expression.elements.iter().peekable();
@@ -215,7 +250,10 @@ impl Visitor for Formatter {
         self.formatted_source.push(']');
     }
     fn visit_struct_expression(&mut self, struct_expression: &crate::ast::StructExpression) {
-        self.pop_comment(&struct_expression.left_brace, self.inline_comment);
+        self.pop_whitespace(&struct_expression.left_brace);
+        self.pop_comment(&struct_expression.left_brace, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push('{');
         if struct_expression.elements.len() > 0 {
             self.formatted_source.push('\n');
@@ -245,9 +283,10 @@ impl Visitor for Formatter {
     // TODO: Inline short lambdas where it has one statement in the body
     fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) {
         if lambda_expression.left_paren.is_some() {
+            self.pop_whitespace(&lambda_expression.left_paren.clone().unwrap());
             self.pop_comment(
                 &lambda_expression.left_paren.clone().unwrap(),
-                self.inline_comment,
+                !self.beginning_statement,
             );
         }
         self.formatted_source.push('(');
@@ -255,7 +294,10 @@ impl Visitor for Formatter {
         let mut it = lambda_expression.parameters.iter().peekable();
 
         while let Some(arg) = it.next() {
-            self.pop_comment(&arg, self.inline_comment);
+            self.pop_whitespace(&arg);
+            self.pop_comment(&arg, !self.beginning_statement);
+            self.beginning_statement = false;
+
             self.formatted_source.push_str(&arg.lexeme);
 
             if it.peek().is_some() {
@@ -278,6 +320,7 @@ impl Visitor for Formatter {
 
         self.formatted_source.push('\n');
         self.indent_level += 1;
+        self.collapse_whitespace = true;
         lambda_expression.body.iter().for_each(|body| {
             self.add_current_indent();
             self.visit_statement(body);
@@ -300,7 +343,10 @@ impl Visitor for Formatter {
         self.visit_expression(&binary_expression.right);
     }
     fn visit_unary_expression(&mut self, unary_expression: &crate::ast::UnaryExpression) {
-        self.pop_comment(&unary_expression.op, self.inline_comment);
+        self.pop_whitespace(&unary_expression.op);
+        self.pop_comment(&unary_expression.op, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str(unary_expression.op.lexeme);
         self.visit_expression(&unary_expression.expr);
     }
@@ -315,7 +361,10 @@ impl Visitor for Formatter {
         self.visit_expression(&ternary_expression.false_expr);
     }
     fn visit_group_expression(&mut self, group_expression: &crate::ast::GroupExpression) {
-        self.pop_comment(&group_expression.left_paren, self.inline_comment);
+        self.pop_whitespace(&group_expression.left_paren);
+        self.pop_comment(&group_expression.left_paren, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push('(');
         self.visit_expression(&group_expression.expr);
         self.pop_comment(&group_expression.right_paren, true);
@@ -340,8 +389,10 @@ impl Visitor for Formatter {
         &mut self,
         variable_declaration: &crate::ast::VariableDeclaration,
     ) {
-        // TODO: Handle setting for all variables use 'var'
-        self.pop_comment(&variable_declaration.var_token, self.inline_comment);
+        self.pop_whitespace(&variable_declaration.var_token);
+        self.pop_comment(&variable_declaration.var_token, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("var ");
         self.pop_comment(&variable_declaration.name, true);
         self.formatted_source
@@ -357,7 +408,10 @@ impl Visitor for Formatter {
         self.visit_expression(&variable_assignment.value);
     }
     fn visit_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) {
-        self.pop_comment(&return_statement.return_token, self.inline_comment);
+        self.pop_whitespace(&return_statement.return_token);
+        self.pop_comment(&return_statement.return_token, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("return ");
         match &return_statement.value {
             Some(value) => self.visit_expression(value),
@@ -367,10 +421,13 @@ impl Visitor for Formatter {
     fn visit_function_definition(&mut self, function_definition: &crate::ast::FunctionDefinition) {
         match &function_definition.access_modifier {
             Some(access_modifier) => {
+                self.pop_whitespace(&function_definition.access_modifier_token.clone().unwrap());
                 self.pop_comment(
                     &function_definition.access_modifier_token.clone().unwrap(),
-                    self.inline_comment,
+                    !self.beginning_statement,
                 );
+                self.beginning_statement = false;
+
                 match access_modifier {
                     AccessModifier::Public => self.formatted_source.push_str("public"),
                     AccessModifier::Private => self.formatted_source.push_str("private"),
@@ -384,14 +441,26 @@ impl Visitor for Formatter {
 
         match &function_definition.return_type {
             Some(return_type) => {
-                self.pop_comment(&function_definition.return_type.clone().unwrap(), true);
+                self.pop_whitespace(&function_definition.return_type.clone().unwrap());
+                self.pop_comment(
+                    &function_definition.return_type.clone().unwrap(),
+                    !self.beginning_statement,
+                );
+                self.beginning_statement = false;
+
                 self.formatted_source.push_str(&return_type.lexeme);
                 self.formatted_source.push(' ');
             }
             None => {}
         }
 
-        self.pop_comment(&function_definition.function_token, true);
+        self.pop_whitespace(&function_definition.function_token);
+        self.pop_comment(
+            &function_definition.function_token,
+            !self.beginning_statement,
+        );
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("function ");
         self.pop_comment(&function_definition.name, true);
         self.formatted_source
@@ -437,6 +506,7 @@ impl Visitor for Formatter {
         self.formatted_source.push_str("{");
         self.formatted_source.push('\n');
         self.indent_level += 1;
+        self.collapse_whitespace = true;
         function_definition.body.iter().for_each(|body| {
             self.add_current_indent();
             self.visit_statement(body);
@@ -452,7 +522,13 @@ impl Visitor for Formatter {
         &mut self,
         component_definition: &crate::ast::ComponentDefinition,
     ) {
-        self.pop_comment(&component_definition.component_token, self.inline_comment);
+        self.pop_whitespace(&component_definition.component_token);
+        self.pop_comment(
+            &component_definition.component_token,
+            !self.beginning_statement,
+        );
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("component ");
 
         component_definition
@@ -472,7 +548,9 @@ impl Visitor for Formatter {
 
         self.indent_level += 1;
         self.formatted_source.push('\n');
+        // TODO: Decide if preserve spacing or force line breaks between statements
         component_definition.body.iter().for_each(|body| {
+            self.collapse_whitespace = true;
             self.add_current_indent();
 
             self.visit_statement(body);
@@ -486,7 +564,10 @@ impl Visitor for Formatter {
         self.formatted_source.push('}');
     }
     fn visit_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) {
-        self.pop_comment(&lucee_function.name, self.inline_comment);
+        self.pop_whitespace(&lucee_function.name);
+        self.pop_comment(&lucee_function.name, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str(lucee_function.name.lexeme);
 
         lucee_function.attributes.iter().for_each(|attribute| {
@@ -500,14 +581,12 @@ impl Visitor for Formatter {
         match &lucee_function.body {
             Some(body) => {
                 if lucee_function.left_brace.is_some() {
-                    self.pop_comment(
-                        &lucee_function.left_brace.clone().unwrap(),
-                        self.inline_comment,
-                    );
+                    self.pop_comment(&lucee_function.left_brace.clone().unwrap(), true);
                 }
-                self.formatted_source.push('{');
+                self.formatted_source.push_str(" {");
                 self.formatted_source.push('\n');
                 self.indent_level += 1;
+                self.collapse_whitespace = true;
                 body.iter().for_each(|body| {
                     self.add_current_indent();
                     self.visit_statement(body);
@@ -527,7 +606,10 @@ impl Visitor for Formatter {
     }
     // TODO: Inline short single statement if statements
     fn visit_if_statement(&mut self, if_statement: &crate::ast::IfStatement) {
-        self.pop_comment(&if_statement.if_token, self.inline_comment);
+        self.pop_whitespace(&if_statement.if_token);
+        self.pop_comment(&if_statement.if_token, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("if ");
         self.pop_comment(&if_statement.left_paren, true);
         self.formatted_source.push_str("(");
@@ -541,6 +623,7 @@ impl Visitor for Formatter {
         self.formatted_source.push('\n');
 
         self.indent_level += 1;
+        self.collapse_whitespace = true;
         if_statement.body.iter().for_each(|body| {
             self.add_current_indent();
             self.visit_statement(body);
@@ -573,6 +656,7 @@ impl Visitor for Formatter {
                         self.formatted_source.push('\n');
 
                         self.indent_level += 1;
+                        self.collapse_whitespace = true;
                         else_body.iter().for_each(|body| {
                             self.add_current_indent();
                             self.visit_statement(body);
@@ -595,7 +679,10 @@ impl Visitor for Formatter {
         }
     }
     fn visit_for_statement(&mut self, for_statement: &crate::ast::ForStatement) {
-        self.pop_comment(&for_statement.for_token, self.inline_comment);
+        self.pop_whitespace(&for_statement.for_token);
+        self.pop_comment(&for_statement.for_token, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("for ");
         self.pop_comment(&for_statement.left_paren, true);
         self.formatted_source.push_str("(");
@@ -651,6 +738,7 @@ impl Visitor for Formatter {
         self.formatted_source.push('\n');
 
         self.indent_level += 1;
+        self.collapse_whitespace = true;
         for_statement.body.iter().for_each(|body| {
             self.add_current_indent();
             self.visit_statement(body);
@@ -665,16 +753,21 @@ impl Visitor for Formatter {
     fn visit_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) {
         if (while_statement.do_while) {
             if while_statement.do_token.is_some() {
+                self.pop_whitespace(&while_statement.do_token.clone().unwrap());
                 self.pop_comment(
                     &while_statement.do_token.clone().unwrap(),
-                    self.inline_comment,
+                    !self.beginning_statement,
                 );
+                self.beginning_statement = false;
             }
             self.formatted_source.push_str("do ");
             self.pop_comment(&while_statement.left_brace, true);
             self.formatted_source.push_str("{");
         } else {
-            self.pop_comment(&while_statement.while_token, self.inline_comment);
+            self.pop_whitespace(&while_statement.while_token);
+            self.pop_comment(&while_statement.while_token, !self.beginning_statement);
+            self.beginning_statement = false;
+
             self.formatted_source.push_str("while (");
             self.visit_expression(&while_statement.condition);
             self.pop_comment(&while_statement.left_paren, true);
@@ -686,6 +779,7 @@ impl Visitor for Formatter {
         self.formatted_source.push('\n');
 
         self.indent_level += 1;
+        self.collapse_whitespace = true;
         while_statement.body.iter().for_each(|body| {
             self.add_current_indent();
             self.visit_statement(body);
@@ -708,7 +802,10 @@ impl Visitor for Formatter {
         }
     }
     fn visit_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) {
-        self.pop_comment(&switch_statement.switch_token, self.inline_comment);
+        self.pop_whitespace(&switch_statement.switch_token);
+        self.pop_comment(&switch_statement.switch_token, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("switch ");
         self.pop_comment(&switch_statement.left_paren, true);
         self.formatted_source.push_str("(");
@@ -720,6 +817,7 @@ impl Visitor for Formatter {
         self.formatted_source.push('\n');
 
         self.indent_level += 1;
+        self.collapse_whitespace = true;
         switch_statement.cases.iter().for_each(|case| {
             self.add_current_indent();
             if case.is_default {
@@ -741,6 +839,7 @@ impl Visitor for Formatter {
             }
 
             self.indent_level += 1;
+            self.collapse_whitespace = true;
             case.body.iter().for_each(|body| {
                 self.add_current_indent();
                 self.visit_statement(body);
@@ -755,13 +854,17 @@ impl Visitor for Formatter {
         self.formatted_source.push('}');
     }
     fn visit_try_catch_statement(&mut self, try_catch_statement: &crate::ast::TryCatchStatement) {
-        self.pop_comment(&try_catch_statement.try_token, self.inline_comment);
+        self.pop_whitespace(&try_catch_statement.try_token);
+        self.pop_comment(&try_catch_statement.try_token, !self.beginning_statement);
+        self.beginning_statement = false;
+
         self.formatted_source.push_str("try ");
         self.pop_comment(&try_catch_statement.try_left_brace, true);
         self.formatted_source.push_str("{");
         self.formatted_source.push('\n');
 
         self.indent_level += 1;
+        self.collapse_whitespace = true;
         try_catch_statement.try_body.iter().for_each(|body| {
             self.add_current_indent();
             self.visit_statement(body);
@@ -802,6 +905,7 @@ impl Visitor for Formatter {
         self.formatted_source.push('\n');
 
         self.indent_level += 1;
+        self.collapse_whitespace = true;
         try_catch_statement.catch_body.iter().for_each(|body| {
             self.add_current_indent();
             self.visit_statement(body);
