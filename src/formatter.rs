@@ -50,22 +50,28 @@ impl Formatter {
     /// before the indent stepdown. Without this utility function, it's
     /// harder to preserve indent.
     fn pop_closing_comment(&mut self, token: &Token) {
-        // TODO: Handle closing indent for multiple comments
-        if token.comments.is_some() {
-            let old_indent = self.indent_level;
-            self.indent_level = 1; // Reset indent for right brace comment
-            self.add_current_indent();
-            self.indent_level = old_indent; // Restore indent level
-            self.pop_comment(&token, false);
-        }
+        self._pop_comment(token, false, true);
     }
 
     /// Formats / pops comment on this token. Handles formatting indents, by stripping out newlines
     fn pop_comment(&mut self, token: &Token, inline: bool) {
+        self._pop_comment(token, inline, false);
+    }
+
+    /// Formats / pops comment on this token. Handles formatting indents, by stripping out newlines
+    /// extra_indent flag for closing comments to maintain indent
+    fn _pop_comment(&mut self, token: &Token, inline: bool, extra_indent: bool) {
         let comment = &token.comments;
         // Comments always printed one after the other, no space in between
         if comment.is_some() {
             comment.clone().unwrap().iter().for_each(|comment| {
+                if extra_indent {
+                    let old_indent = self.indent_level;
+                    self.indent_level = 1; // Reset indent for right brace comment
+                    self.add_current_indent();
+                    self.indent_level = old_indent; // Restore indent level
+                }
+
                 self.pop_whitespace(&comment);
                 let formatted_comment = self.format_comment(&comment.lexeme);
                 for line in formatted_comment.lines() {
@@ -569,6 +575,7 @@ impl Visitor for Formatter {
         self.beginning_statement = false;
 
         self.formatted_source.push_str(lucee_function.name.lexeme);
+        self.formatted_source.push_str(" ");
 
         lucee_function.attributes.iter().for_each(|attribute| {
             self.pop_comment(&attribute.0, true);
@@ -583,7 +590,7 @@ impl Visitor for Formatter {
                 if lucee_function.left_brace.is_some() {
                     self.pop_comment(&lucee_function.left_brace.clone().unwrap(), true);
                 }
-                self.formatted_source.push_str(" {");
+                self.formatted_source.push_str("{");
                 self.formatted_source.push('\n');
                 self.indent_level += 1;
                 self.collapse_whitespace = true;
