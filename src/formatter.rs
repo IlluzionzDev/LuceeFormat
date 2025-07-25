@@ -2,7 +2,22 @@ use crate::ast::{AccessModifier, ForControl, LiteralValue, Statement, AST};
 use crate::lexer::Token;
 use crate::visitor::Visitor;
 
-pub struct Formatter {
+enum Doc<'a> {
+    // Represents string literal. No breaks can occur in the middle of the string
+    Text(&'a str),
+    // Breaks new line that may be condensed (removed)
+    Line,
+    // Always a line break
+    HardLine,
+    // Indents the doc
+    Indent(Box<Doc<'a>>),
+    // Main way to group elements together
+    Group(Vec<Doc<'a>>),
+    // Space that line breaks can freely happen between, represented by " " if doesn't break
+    BreakableSpace,
+}
+
+pub struct Formatter<'a> {
     pub formatted_source: String,
 
     pub indent_level: usize,
@@ -16,15 +31,18 @@ pub struct Formatter {
     /// of a function, to ensure the first statement has no whitespace before it.
     /// Once #pop_whitespace is called, this flag is reset to false.
     pub collapse_whitespace: bool,
+
+    pub docs: Vec<Doc<'a>>,
 }
 
-impl Formatter {
+impl<'a> Formatter<'a> {
     pub fn new() -> Self {
         Self {
             formatted_source: String::new(),
             indent_level: 0,
             beginning_statement: true,
             collapse_whitespace: true,
+            docs: Vec::new(),
         }
     }
 
@@ -173,7 +191,9 @@ impl Formatter {
     }
 }
 
-impl Visitor for Formatter {
+impl<'a> Visitor<()> for Formatter<'a> {
+    fn combine_docs(&mut self, docs: &mut Vec<()>) -> () {}
+
     fn visit_statement(&mut self, statement: &Statement) {
         // At every new statement, reset inline comment
         self.beginning_statement = true;

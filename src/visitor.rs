@@ -6,107 +6,125 @@ pub trait VisitorResult {}
 /// Walkable AST Node
 /// To be implemented by AST nodes that can be traversed
 /// Default implementation is to walk itself and all children
-pub trait Walkable {
-    fn walk<V: Visitor>(&self, visitor: &mut V);
+pub trait Walkable<T> {
+    fn walk<V: Visitor<T>>(&self, visitor: &mut V);
 }
 
 /**
 * Visitor representation for the base AST. Default implements visiting all base statements and expressions,
 * but does not visit data on the structs, that is up to the implementation. Simply visits the enum variants in the AST.
 */
-pub trait Visitor {
-    fn visit(&mut self, ast: &AST) {
+pub trait Visitor<T> {
+    fn visit(&mut self, ast: &AST) -> T {
+        let mut docs = Vec::new();
         for statement in &ast.statements {
-            self.visit_statement(statement);
+            docs.push(self.visit_statement(statement));
         }
+        self.combine_docs(&mut docs)
     }
 
-    fn visit_statement(&mut self, statement: &Statement) {
-        self.walk_statement(statement);
+    /// Util to combine return types into one. To be implemented by the visitor.
+    /// Used so visitors can partially implement visitor, but also define return types for visitors
+    fn combine_docs(&mut self, docs: &mut Vec<T>) -> T;
+
+    fn visit_statement(&mut self, statement: &Statement) -> T {
+        self.walk_statement(statement)
     }
 
-    fn visit_expression(&mut self, expression: &Expression) {
+    fn visit_expression(&mut self, expression: &Expression) -> T {
         self.walk_expression(expression)
     }
 
     /// Visit expressions. Don't recursively visit the expression, just the expression itself
-    fn visit_literal(&mut self, literal: &crate::ast::Literal) {
+    fn visit_literal(&mut self, literal: &crate::ast::Literal) -> T {
         self.walk_literal(literal)
     }
-    fn visit_identifier(&mut self, identifier: &Token) {
+    fn visit_identifier(&mut self, identifier: &Token) -> T {
         self.walk_identifier(identifier)
     }
-    fn visit_function_call(&mut self, function_call: &crate::ast::FunctionCall) {
+    fn visit_function_call(&mut self, function_call: &crate::ast::FunctionCall) -> T {
         self.walk_function_call(function_call)
     }
-    fn visit_object_creation(&mut self, object_creation: &crate::ast::ObjectCreation) {
+    fn visit_object_creation(&mut self, object_creation: &crate::ast::ObjectCreation) -> T {
         self.walk_object_creation(object_creation)
     }
-    fn visit_array_expression(&mut self, array_expression: &crate::ast::ArrayExpression) {
+    fn visit_array_expression(&mut self, array_expression: &crate::ast::ArrayExpression) -> T {
         self.walk_array_expression(array_expression)
     }
-    fn visit_struct_expression(&mut self, struct_expression: &crate::ast::StructExpression) {
+    fn visit_struct_expression(&mut self, struct_expression: &crate::ast::StructExpression) -> T {
         self.walk_struct_expression(struct_expression)
     }
-    fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) {
+    fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) -> T {
         self.walk_lambda_expression(lambda_expression)
     }
-    fn visit_binary_expression(&mut self, binary_expression: &crate::ast::BinaryExpression) {
+    fn visit_binary_expression(&mut self, binary_expression: &crate::ast::BinaryExpression) -> T {
         self.walk_binary_expression(binary_expression)
     }
-    fn visit_unary_expression(&mut self, unary_expression: &crate::ast::UnaryExpression) {
+    fn visit_unary_expression(&mut self, unary_expression: &crate::ast::UnaryExpression) -> T {
         self.walk_unary_expression(unary_expression)
     }
-    fn visit_ternary_expression(&mut self, ternary_expression: &crate::ast::TernaryExpression) {
+    fn visit_ternary_expression(
+        &mut self,
+        ternary_expression: &crate::ast::TernaryExpression,
+    ) -> T {
         self.walk_ternary_expression(ternary_expression)
     }
-    fn visit_group_expression(&mut self, group_expression: &crate::ast::GroupExpression) {
+    fn visit_group_expression(&mut self, group_expression: &crate::ast::GroupExpression) -> T {
         self.walk_group_expression(group_expression)
     }
-    fn visit_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) {
+    fn visit_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) -> T {
         self.walk_member_expression(member_expression)
     }
-    fn visit_index_access(&mut self, index_access: &crate::ast::IndexAccess) {
+    fn visit_index_access(&mut self, index_access: &crate::ast::IndexAccess) -> T {
         self.walk_index_access(index_access)
     }
 
     fn visit_variable_declaration(
         &mut self,
         variable_declaration: &crate::ast::VariableDeclaration,
-    ) {
+    ) -> T {
         self.walk_variable_declaration(variable_declaration)
     }
-    fn visit_variable_assignment(&mut self, variable_assignment: &crate::ast::VariableAssignment) {
+    fn visit_variable_assignment(
+        &mut self,
+        variable_assignment: &crate::ast::VariableAssignment,
+    ) -> T {
         self.walk_variable_assignment(variable_assignment)
     }
-    fn visit_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) {
+    fn visit_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) -> T {
         self.walk_return_statement(return_statement)
     }
-    fn visit_function_definition(&mut self, function_definition: &crate::ast::FunctionDefinition) {
+    fn visit_function_definition(
+        &mut self,
+        function_definition: &crate::ast::FunctionDefinition,
+    ) -> T {
         self.walk_function_definition(function_definition)
     }
     fn visit_component_definition(
         &mut self,
         component_definition: &crate::ast::ComponentDefinition,
-    ) {
+    ) -> T {
         self.walk_component_definition(component_definition)
     }
-    fn visit_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) {
+    fn visit_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) -> T {
         self.walk_lucee_function(lucee_function)
     }
-    fn visit_if_statement(&mut self, if_statement: &crate::ast::IfStatement) {
+    fn visit_if_statement(&mut self, if_statement: &crate::ast::IfStatement) -> T {
         self.walk_if_statement(if_statement)
     }
-    fn visit_for_statement(&mut self, for_statement: &crate::ast::ForStatement) {
+    fn visit_for_statement(&mut self, for_statement: &crate::ast::ForStatement) -> T {
         self.walk_for_statement(for_statement)
     }
-    fn visit_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) {
+    fn visit_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) -> T {
         self.walk_while_statement(while_statement)
     }
-    fn visit_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) {
+    fn visit_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) -> T {
         self.walk_switch_statement(switch_statement)
     }
-    fn visit_try_catch_statement(&mut self, try_catch_statement: &crate::ast::TryCatchStatement) {
+    fn visit_try_catch_statement(
+        &mut self,
+        try_catch_statement: &crate::ast::TryCatchStatement,
+    ) -> T {
         self.walk_try_catch_statement(try_catch_statement)
     }
 
@@ -117,7 +135,7 @@ pub trait Visitor {
     /// are to be directly represented with the visit method and not default walked.
     ///
     /// Default implementations here are for common nodes that need walking
-    fn walk_statement(&mut self, statement: &Statement) {
+    fn walk_statement(&mut self, statement: &Statement) -> T {
         match statement {
             Statement::ExpressionStmt(expression) => self.visit_expression(expression),
             Statement::VariableDeclaration(variable_declaration) => {
@@ -149,7 +167,7 @@ pub trait Visitor {
             }
         }
     }
-    fn walk_expression(&mut self, expression: &Expression) {
+    fn walk_expression(&mut self, expression: &Expression) -> T {
         match expression {
             Expression::Literal(literal) => self.visit_literal(literal),
             Expression::Identifier(identifier) => self.visit_identifier(identifier),
@@ -182,97 +200,138 @@ pub trait Visitor {
                 self.visit_member_expression(member_expression)
             }
             Expression::IndexAccess(index_access) => self.visit_index_access(index_access),
-            _ => {}
+            _ => self.combine_docs(&mut vec![]),
         }
     }
-    fn walk_literal(&mut self, literal: &crate::ast::Literal) {}
-    fn walk_identifier(&mut self, identifier: &Token) {}
-    fn walk_function_call(&mut self, function_call: &crate::ast::FunctionCall) {}
-    fn walk_object_creation(&mut self, object_creation: &crate::ast::ObjectCreation) {}
-    fn walk_array_expression(&mut self, array_expression: &crate::ast::ArrayExpression) {
+    fn walk_literal(&mut self, literal: &crate::ast::Literal) -> T {
+        self.combine_docs(&mut vec![])
+    }
+    fn walk_identifier(&mut self, identifier: &Token) -> T {
+        self.combine_docs(&mut vec![])
+    }
+    fn walk_function_call(&mut self, function_call: &crate::ast::FunctionCall) -> T {
+        self.combine_docs(&mut vec![])
+    }
+    fn walk_object_creation(&mut self, object_creation: &crate::ast::ObjectCreation) -> T {
+        self.combine_docs(&mut vec![])
+    }
+    fn walk_array_expression(&mut self, array_expression: &crate::ast::ArrayExpression) -> T {
+        let mut docs = vec![];
         array_expression.elements.iter().for_each(|element| {
-            self.visit_expression(element);
-        })
-    }
-    fn walk_struct_expression(&mut self, struct_expression: &crate::ast::StructExpression) {}
-    fn walk_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) {
-        lambda_expression.body.iter().for_each(|statement| {
-            self.visit_statement(statement);
+            docs.push(self.visit_expression(element));
         });
+        self.combine_docs(&mut docs)
     }
-    fn walk_binary_expression(&mut self, binary_expression: &crate::ast::BinaryExpression) {
-        self.visit_expression(&binary_expression.left);
-        self.visit_expression(&binary_expression.right);
+    fn walk_struct_expression(&mut self, struct_expression: &crate::ast::StructExpression) -> T {
+        self.combine_docs(&mut vec![])
     }
-    fn walk_unary_expression(&mut self, unary_expression: &crate::ast::UnaryExpression) {
-        self.visit_expression(&unary_expression.expr);
+    fn walk_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) -> T {
+        let mut docs = vec![];
+        lambda_expression.body.iter().for_each(|statement| {
+            docs.push(self.visit_statement(statement));
+        });
+        self.combine_docs(&mut docs)
     }
-    fn walk_ternary_expression(&mut self, ternary_expression: &crate::ast::TernaryExpression) {
-        self.visit_expression(&ternary_expression.condition);
-        self.visit_expression(&ternary_expression.true_expr);
-        self.visit_expression(&ternary_expression.false_expr);
+    fn walk_binary_expression(&mut self, binary_expression: &crate::ast::BinaryExpression) -> T {
+        let mut docs = vec![];
+        docs.push(self.visit_expression(&binary_expression.left));
+        docs.push(self.visit_expression(&binary_expression.right));
+        self.combine_docs(&mut docs)
     }
-    fn walk_group_expression(&mut self, group_expression: &crate::ast::GroupExpression) {
-        self.visit_expression(&group_expression.expr);
+    fn walk_unary_expression(&mut self, unary_expression: &crate::ast::UnaryExpression) -> T {
+        self.visit_expression(&unary_expression.expr)
     }
-    fn walk_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) {
-        self.visit_expression(&member_expression.object);
-        self.visit_expression(&member_expression.property);
+    fn walk_ternary_expression(&mut self, ternary_expression: &crate::ast::TernaryExpression) -> T {
+        let mut docs = vec![];
+        docs.push(self.visit_expression(&ternary_expression.condition));
+        docs.push(self.visit_expression(&ternary_expression.true_expr));
+        docs.push(self.visit_expression(&ternary_expression.false_expr));
+        self.combine_docs(&mut docs)
     }
-    fn walk_index_access(&mut self, index_access: &crate::ast::IndexAccess) {
-        self.visit_expression(&index_access.object);
-        self.visit_expression(&index_access.index);
+    fn walk_group_expression(&mut self, group_expression: &crate::ast::GroupExpression) -> T {
+        self.visit_expression(&group_expression.expr)
+    }
+    fn walk_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) -> T {
+        let mut docs = vec![];
+        docs.push(self.visit_expression(&member_expression.object));
+        docs.push(self.visit_expression(&member_expression.property));
+        self.combine_docs(&mut docs)
+    }
+    fn walk_index_access(&mut self, index_access: &crate::ast::IndexAccess) -> T {
+        let mut docs = Vec::new();
+        docs.push(self.visit_expression(&index_access.object));
+        docs.push(self.visit_expression(&index_access.index));
+        self.combine_docs(&mut docs)
     }
 
     fn walk_variable_declaration(
         &mut self,
         variable_declaration: &crate::ast::VariableDeclaration,
-    ) {
+    ) -> T {
         self.visit_expression(&variable_declaration.value)
     }
-    fn walk_variable_assignment(&mut self, variable_assignment: &crate::ast::VariableAssignment) {
-        self.visit_expression(&variable_assignment.name);
-        self.visit_expression(&variable_assignment.value);
+    fn walk_variable_assignment(
+        &mut self,
+        variable_assignment: &crate::ast::VariableAssignment,
+    ) -> T {
+        let mut docs = Vec::new();
+        docs.push(self.visit_expression(&variable_assignment.name));
+        docs.push(self.visit_expression(&variable_assignment.value));
+        self.combine_docs(&mut docs)
     }
-    fn walk_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) {
+    fn walk_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) -> T {
         match &return_statement.value {
             Some(value) => self.visit_expression(value),
-            None => {}
+            None => self.combine_docs(&mut vec![]),
         }
     }
-    fn walk_function_definition(&mut self, function_definition: &crate::ast::FunctionDefinition) {
+    fn walk_function_definition(
+        &mut self,
+        function_definition: &crate::ast::FunctionDefinition,
+    ) -> T {
+        let mut docs = Vec::new();
         function_definition.body.iter().for_each(|statement| {
-            self.visit_statement(statement);
+            docs.push(self.visit_statement(statement));
         });
+        self.combine_docs(&mut docs)
     }
     fn walk_component_definition(
         &mut self,
         component_definition: &crate::ast::ComponentDefinition,
-    ) {
+    ) -> T {
+        let mut docs = Vec::new();
         component_definition.body.iter().for_each(|statement| {
-            self.visit_statement(statement);
+            docs.push(self.visit_statement(statement));
         });
+        self.combine_docs(&mut docs)
     }
-    fn walk_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) {
+    fn walk_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) -> T {
         match &lucee_function.body {
-            Some(body) => body.iter().for_each(|statement| {
-                self.visit_statement(statement);
-            }),
-            None => {}
+            Some(body) => {
+                let mut docs = Vec::new();
+                body.iter().for_each(|statement| {
+                    docs.push(self.visit_statement(statement));
+                });
+                self.combine_docs(&mut docs)
+            }
+            None => self.combine_docs(&mut vec![]),
         }
     }
-    fn walk_if_statement(&mut self, if_statement: &crate::ast::IfStatement) {
-        self.visit_expression(&if_statement.condition);
+    fn walk_if_statement(&mut self, if_statement: &crate::ast::IfStatement) -> T {
+        let mut docs = Vec::new();
+        docs.push(self.visit_expression(&if_statement.condition));
         if_statement.body.iter().for_each(|statement| {
-            self.visit_statement(statement);
+            docs.push(self.visit_statement(statement));
         });
         if let Some(else_body) = &if_statement.else_body {
             else_body.iter().for_each(|statement| {
-                self.visit_statement(statement);
+                docs.push(self.visit_statement(statement));
             });
         }
+        self.combine_docs(&mut docs)
     }
-    fn walk_for_statement(&mut self, for_statement: &crate::ast::ForStatement) {
+    fn walk_for_statement(&mut self, for_statement: &crate::ast::ForStatement) -> T {
+        let mut docs = vec![];
         match &for_statement.control {
             ForControl::Increment {
                 init,
@@ -280,34 +339,44 @@ pub trait Visitor {
                 increment,
                 ..
             } => {
-                self.visit_expression(init);
-                self.visit_expression(condition);
-                self.visit_expression(increment);
+                docs.push(self.visit_expression(init));
+                docs.push(self.visit_expression(condition));
+                docs.push(self.visit_expression(increment));
             }
             ForControl::LoopOver {
                 variable, array, ..
             } => {
-                self.visit_expression(array);
+                docs.push(self.visit_expression(array));
             }
             _ => {}
         }
         for_statement.body.iter().for_each(|statement| {
-            self.visit_statement(statement);
+            docs.push(self.visit_statement(statement));
         });
+        self.combine_docs(&mut docs)
     }
-    fn walk_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) {
-        self.visit_expression(&while_statement.condition);
+    fn walk_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) -> T {
+        let mut docs = Vec::new();
+        docs.push(self.visit_expression(&while_statement.condition));
         while_statement.body.iter().for_each(|statement| {
-            self.visit_statement(statement);
+            docs.push(self.visit_statement(statement));
         });
+        self.combine_docs(&mut docs)
     }
-    fn walk_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) {}
-    fn walk_try_catch_statement(&mut self, try_catch_statement: &crate::ast::TryCatchStatement) {
+    fn walk_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) -> T {
+        self.combine_docs(&mut vec![])
+    }
+    fn walk_try_catch_statement(
+        &mut self,
+        try_catch_statement: &crate::ast::TryCatchStatement,
+    ) -> T {
+        let mut docs = Vec::new();
         try_catch_statement.try_body.iter().for_each(|statement| {
-            self.visit_statement(statement);
+            docs.push(self.visit_statement(statement));
         });
         try_catch_statement.catch_body.iter().for_each(|statement| {
-            self.visit_statement(statement);
+            docs.push(self.visit_statement(statement));
         });
+        self.combine_docs(&mut docs)
     }
 }

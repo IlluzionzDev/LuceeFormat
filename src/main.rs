@@ -1,23 +1,13 @@
 #![feature(associated_type_defaults)]
 
 use crate::formatter::Formatter;
-use crate::visitor::Walkable;
+use crate::visitor::{Visitor, Walkable};
 
 mod ast;
 mod formatter;
 mod lexer;
 mod parser;
 mod visitor;
-
-struct Diagnostics;
-impl crate::visitor::Visitor for Diagnostics {
-    fn visit_function_definition(&mut self, function_definition: &crate::ast::FunctionDefinition) {
-        println!(
-            "Function Definition Access Modifier: {:?}",
-            function_definition.access_modifier_token
-        );
-    }
-}
 
 fn main() {
     // Start time
@@ -46,10 +36,6 @@ fn main() {
     let mut formatter = Formatter::new();
     ast.walk(&mut formatter);
     let traverse_end = traverse_start.elapsed().as_micros();
-
-    // Diagnostics on AST for debugging
-    let mut diagnostics = Diagnostics {};
-    // ast.walk(&mut diagnostics);
 
     let write_start = std::time::Instant::now();
 

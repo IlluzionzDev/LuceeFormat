@@ -22,3 +22,4 @@ complex rules, and just runs through tokens in microseconds.
 ## Rough Current Todos
 
 - Line breaks with '// comments' as "inline" comments should preserve line breaks
+- Handle ++ printing
