@@ -1,6 +1,6 @@
 #![feature(associated_type_defaults)]
 
-use crate::formatter::Formatter;
+use crate::formatter::{DocFormatter, Formatter};
 use crate::visitor::{Visitor, Walkable};
 
 mod ast;
@@ -14,7 +14,7 @@ fn main() {
     let start_file = std::time::Instant::now();
 
     // Read in test.cfm into a string
-    let source = std::fs::read_to_string("test/GenericDAO.cfc").unwrap();
+    let source = std::fs::read_to_string("test/test.cfc").unwrap();
 
     let end_file = start_file.elapsed().as_micros();
 
@@ -34,13 +34,15 @@ fn main() {
 
     let traverse_start = std::time::Instant::now();
     let mut formatter = Formatter::new();
-    ast.walk(&mut formatter);
+    let doc = ast.walk(&mut formatter);
+    let mut doc_formatter = DocFormatter::new(40, 4);
+    let result = doc_formatter.format(&doc);
     let traverse_end = traverse_start.elapsed().as_micros();
 
     let write_start = std::time::Instant::now();
 
     // Write string to file
-    std::fs::write("test/output.cfc", formatter.formatted_source).unwrap();
+    std::fs::write("test/output.cfc", result).unwrap();
 
     let write_end = write_start.elapsed().as_micros();
 

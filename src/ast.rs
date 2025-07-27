@@ -15,8 +15,8 @@ pub struct AST<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for AST<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit(self)
     }
 }
 
@@ -37,8 +37,8 @@ pub enum Statement<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for Statement<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_statement(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_statement(self)
     }
 }
 
@@ -51,8 +51,8 @@ pub struct VariableDeclaration<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for VariableDeclaration<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_variable_declaration(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_variable_declaration(self)
     }
 }
 
@@ -64,8 +64,8 @@ pub struct VariableAssignment<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for VariableAssignment<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_variable_assignment(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_variable_assignment(self)
     }
 }
 
@@ -76,8 +76,8 @@ pub struct ReturnStatement<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for ReturnStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_return_statement(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_return_statement(self)
     }
 }
 
@@ -91,8 +91,8 @@ pub struct LuceeFunction<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for LuceeFunction<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_lucee_function(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_lucee_function(self)
     }
 }
 
@@ -115,8 +115,8 @@ pub enum Expression<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for Expression<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_expression(self)
     }
 }
 
@@ -129,8 +129,8 @@ pub struct FunctionCall<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for FunctionCall<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_function_call(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_function_call(self)
     }
 }
 
@@ -141,8 +141,8 @@ pub struct ObjectCreation<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for ObjectCreation<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_object_creation(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_object_creation(self)
     }
 }
 
@@ -154,8 +154,8 @@ pub struct ArrayExpression<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for ArrayExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_array_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_array_expression(self)
     }
 }
 
@@ -167,8 +167,8 @@ pub struct StructExpression<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for StructExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_struct_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_struct_expression(self)
     }
 }
 
@@ -184,8 +184,8 @@ pub struct LambdaExpression<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for LambdaExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_lambda_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_lambda_expression(self)
     }
 }
 
@@ -197,8 +197,8 @@ pub struct BinaryExpression<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for BinaryExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_binary_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_binary_expression(self)
     }
 }
 
@@ -209,8 +209,8 @@ pub struct UnaryExpression<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for UnaryExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_unary_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_unary_expression(self)
     }
 }
 
@@ -224,8 +224,8 @@ pub struct TernaryExpression<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for TernaryExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_ternary_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_ternary_expression(self)
     }
 }
 
@@ -237,8 +237,8 @@ pub struct GroupExpression<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for GroupExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_group_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_group_expression(self)
     }
 }
 
@@ -250,8 +250,8 @@ pub struct MemberAccess<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for MemberAccess<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_member_expression(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_member_expression(self)
     }
 }
 
@@ -264,8 +264,8 @@ pub struct IndexAccess<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for IndexAccess<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_index_access(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_index_access(self)
     }
 }
 
@@ -284,8 +284,8 @@ pub enum LiteralValue {
 }
 
 impl<'ast, T> Walkable<T> for Literal<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_literal(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_literal(self)
     }
 }
 
@@ -387,8 +387,8 @@ pub struct FunctionDefinition<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for FunctionDefinition<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_function_definition(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_function_definition(self)
     }
 }
 
@@ -402,8 +402,8 @@ pub struct ComponentDefinition<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for ComponentDefinition<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_component_definition(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_component_definition(self)
     }
 }
 
@@ -440,8 +440,8 @@ pub struct IfStatement<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for IfStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_if_statement(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_if_statement(self)
     }
 }
 
@@ -476,8 +476,8 @@ pub enum ForControl<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for ForStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_for_statement(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_for_statement(self)
     }
 }
 
@@ -495,8 +495,8 @@ pub struct WhileStatement<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for WhileStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_while_statement(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_while_statement(self)
     }
 }
 
@@ -520,8 +520,8 @@ pub struct CaseStatement<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for SwitchStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_switch_statement(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_switch_statement(self)
     }
 }
 
@@ -543,7 +543,7 @@ pub struct TryCatchStatement<'ast> {
 }
 
 impl<'ast, T> Walkable<T> for TryCatchStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) {
-        visitor.visit_try_catch_statement(self);
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_try_catch_statement(self)
     }
 }

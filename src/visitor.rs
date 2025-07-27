@@ -7,7 +7,7 @@ pub trait VisitorResult {}
 /// To be implemented by AST nodes that can be traversed
 /// Default implementation is to walk itself and all children
 pub trait Walkable<T> {
-    fn walk<V: Visitor<T>>(&self, visitor: &mut V);
+    fn walk<V: Visitor<T>>(&self, visitor: &mut V) -> T;
 }
 
 /**
@@ -25,7 +25,7 @@ pub trait Visitor<T> {
 
     /// Util to combine return types into one. To be implemented by the visitor.
     /// Used so visitors can partially implement visitor, but also define return types for visitors
-    fn combine_docs(&mut self, docs: &mut Vec<T>) -> T;
+    fn combine_docs(&mut self, docs: &[T]) -> T;
 
     fn visit_statement(&mut self, statement: &Statement) -> T {
         self.walk_statement(statement)

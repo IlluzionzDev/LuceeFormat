@@ -21,5 +21,6 @@ complex rules, and just runs through tokens in microseconds.
 
 ## Rough Current Todos
 
+- Arena allocator for AST nodes
 - Line breaks with '// comments' as "inline" comments should preserve line breaks
 - Handle ++ printing
