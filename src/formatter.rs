@@ -15,9 +15,22 @@ pub enum Doc {
     Indent(Box<Doc>),
     // Main way to group elements together
     Group(Vec<Doc>),
+    Docs(Vec<Doc>), // Just a grouping that renders it's children, doesn't do anything else
     // Space that line breaks can freely happen between, represented by " " if doesn't break
     BreakableSpace,
     Nil, // Ignored
+}
+
+impl Doc {
+    pub fn width(&self) -> usize {
+        match self {
+            Doc::Text(text) => text.len(),
+            Doc::Indent(doc) => doc.width(),
+            Doc::Group(docs) => docs.iter().map(|doc| doc.width()).sum(),
+            Doc::BreakableSpace => 1,
+            _ => 0,
+        }
+    }
 }
 
 pub struct DocFormatter {
@@ -75,7 +88,25 @@ impl DocFormatter {
                 self.write_doc(doc, is_flat);
                 self.current_indent -= self.indent_size;
             }
+            Doc::Docs(docs) => {
+                for doc in docs {
+                    self.write_doc(doc, is_flat);
+                }
+            }
             Doc::Group(docs) => {
+                let total_length: usize = docs.iter().map(|d| d.width()).sum();
+
+                if total_length > self.max_width {
+                    for doc in docs {
+                        self.write_doc(doc, false);
+                    }
+                } else {
+                    for doc in docs {
+                        self.write_doc(doc, true);
+                    }
+                }
+                return;
+
                 // Try writing flat first
                 let saved_output = self.output.clone();
                 let saved_length = self.current_line_length;
@@ -85,6 +116,7 @@ impl DocFormatter {
 
                 // If it exceeds max width, write normal version
                 if self.current_line_length > self.max_width {
+                    println!("Broke Group {:?}", doc);
                     self.output = saved_output;
                     self.current_line_length = saved_length;
                     for doc in docs {
@@ -824,34 +856,56 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&if_statement.if_token, !self.beginning_statement));
         self.beginning_statement = false;
 
-        docs.push(Doc::Text("if ".to_string()));
-        docs.push(self.pop_comment(&if_statement.left_paren, true));
-        docs.push(Doc::Text("(".to_string()));
-        docs.push(Doc::Indent(Box::new(Doc::Group(vec![
+        let mut test_group = vec![];
+        test_group.push(Doc::Text("if ".to_string()));
+        test_group.push(self.pop_comment(&if_statement.left_paren, true));
+        test_group.push(Doc::Text("(".to_string()));
+        test_group.push(Doc::Indent(Box::new(Doc::Group(vec![
             Doc::Line,
             self.visit_expression(&if_statement.condition),
             self.pop_comment(&if_statement.right_paren, true),
         ]))));
-        docs.push(Doc::Line);
-        docs.push(Doc::Text(") ".to_string()));
+        test_group.push(Doc::Line);
+        test_group.push(Doc::Text(") ".to_string()));
         if if_statement.left_brace.is_some() {
-            docs.push(self.pop_comment(&if_statement.left_brace.clone().unwrap(), true));
+            test_group.push(self.pop_comment(&if_statement.left_brace.clone().unwrap(), true));
         }
-        docs.push(Doc::Text("{".to_string()));
-        docs.push(Doc::Line);
+        docs.push(Doc::Group(test_group));
+
+        let mut full_body_docs = vec![];
+        full_body_docs.push(Doc::Text("{".to_string()));
 
         self.collapse_whitespace = true;
         let mut body_docs = vec![];
+        if if_statement.body.len() > 1 {
+            body_docs.push(Doc::HardLine);
+        } else {
+            body_docs.push(Doc::BreakableSpace);
+        }
+        // If statements > 1, force line breaks
         if_statement.body.iter().for_each(|body| {
-            body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+            body_docs.push(self.visit_statement(body));
+            if if_statement.body.len() > 1 {
+                body_docs.push(Doc::HardLine);
+            } else {
+                body_docs.push(Doc::Line);
+            }
         });
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        body_docs.remove(body_docs.len() - 1); // Remove last line break
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
         if if_statement.right_brace.is_some() {
-            docs.push(self.pop_closing_comment(&if_statement.right_brace.clone().unwrap()));
+            full_body_docs
+                .push(self.pop_closing_comment(&if_statement.right_brace.clone().unwrap()));
         }
-        docs.push(Doc::Line);
-        docs.push(Doc::Text("}".to_string()));
+        if if_statement.body.len() > 1 {
+            full_body_docs.push(Doc::HardLine);
+        } else {
+            full_body_docs.push(Doc::BreakableSpace);
+        }
+        full_body_docs.push(Doc::Text("}".to_string()));
+
+        docs.push(Doc::Group(full_body_docs));
 
         match &if_statement.else_body {
             Some(else_body) => {
@@ -877,24 +931,42 @@ impl Visitor<Doc> for Formatter {
                                 ),
                             );
                         }
-                        docs.push(Doc::Text("{".to_string()));
-                        docs.push(Doc::Line);
+                        let mut else_body_docs = vec![];
+                        else_body_docs.push(Doc::Text("{".to_string()));
+                        else_body_docs.push(Doc::Line);
 
                         self.collapse_whitespace = true;
                         let mut body_docs = vec![];
+                        if else_body.len() > 1 {
+                            body_docs.push(Doc::HardLine);
+                        } else {
+                            body_docs.push(Doc::BreakableSpace);
+                        }
                         else_body.iter().for_each(|body| {
-                            body_docs
-                                .push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+                            body_docs.push(self.visit_statement(body));
+                            if if_statement.body.len() > 1 {
+                                body_docs.push(Doc::HardLine);
+                            } else {
+                                body_docs.push(Doc::Line);
+                            }
                         });
-                        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+                        body_docs.remove(body_docs.len() - 1); // Remove last line break
+                        else_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
                         if if_statement.else_right_brace.is_some() {
-                            docs.push(self.pop_closing_comment(
+                            else_body_docs.push(self.pop_closing_comment(
                                 &if_statement.else_right_brace.clone().unwrap(),
                             ));
                         }
-                        docs.push(Doc::Line);
-                        docs.push(Doc::Text("}".to_string()));
+
+                        if else_body.len() > 1 {
+                            else_body_docs.push(Doc::HardLine);
+                        } else {
+                            else_body_docs.push(Doc::BreakableSpace);
+                        }
+                        else_body_docs.push(Doc::Text("}".to_string()));
+
+                        docs.push(Doc::Group(else_body_docs));
                     }
                 }
             }
