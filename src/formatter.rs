@@ -72,9 +72,6 @@ impl DocFormatter {
                     self.output
                         .extend(iter::repeat(' ').take(self.current_indent));
                     self.current_line_length = self.current_indent;
-                } else {
-                    // self.output.push(' ');
-                    // self.current_line_length += 1;
                 }
             }
             Doc::HardLine => {
@@ -84,9 +81,15 @@ impl DocFormatter {
                 self.current_line_length = self.current_indent;
             }
             Doc::Indent(doc) => {
-                self.current_indent += self.indent_size;
-                self.write_doc(doc, is_flat);
-                self.current_indent -= self.indent_size;
+                if !is_flat {
+                    self.current_line_length += self.indent_size;
+                    self.current_indent += self.indent_size;
+                    self.output.extend(iter::repeat(' ').take(self.indent_size));
+                    self.write_doc(doc, is_flat);
+                    self.current_indent -= self.indent_size;
+                } else {
+                    self.write_doc(doc, is_flat);
+                }
             }
             Doc::Docs(docs) => {
                 for doc in docs {
@@ -105,24 +108,6 @@ impl DocFormatter {
                         self.write_doc(doc, true);
                     }
                 }
-                return;
-
-                // Try writing flat first
-                let saved_output = self.output.clone();
-                let saved_length = self.current_line_length;
-
-                // Attempt flat version
-                self.write_doc_flat(docs);
-
-                // If it exceeds max width, write normal version
-                if self.current_line_length > self.max_width {
-                    println!("Broke Group {:?}", doc);
-                    self.output = saved_output;
-                    self.current_line_length = saved_length;
-                    for doc in docs {
-                        self.write_doc(doc, false);
-                    }
-                }
             }
             Doc::BreakableSpace => {
                 if !is_flat {
@@ -136,12 +121,6 @@ impl DocFormatter {
                 }
             }
             Doc::Nil => {}
-        }
-    }
-
-    fn write_doc_flat(&mut self, docs: &[Doc]) {
-        for doc in docs {
-            self.write_doc(doc, true);
         }
     }
 }
@@ -387,12 +366,12 @@ impl Visitor<Doc> for Formatter {
 
             arg_docs.push(self.visit_expression(&arg.1));
 
-            if it.peek().is_some() {
-                arg_docs.push(Doc::Text(",".to_string()));
-                arg_docs.push(Doc::BreakableSpace);
-            }
+            full_arg_docs.push(Doc::Group(arg_docs));
 
-            full_arg_docs.push(Doc::Indent(Box::new(Doc::Group(arg_docs))));
+            if it.peek().is_some() {
+                full_arg_docs.push(Doc::Text(",".to_string()));
+                full_arg_docs.push(Doc::BreakableSpace);
+            }
         }
         docs.push(Doc::Indent(Box::new(Doc::Group(full_arg_docs))));
 
@@ -448,23 +427,27 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("{".to_string()));
-        docs.push(Doc::Line);
+        docs.push(Doc::BreakableSpace);
+
+        let mut it = struct_expression.elements.iter().peekable();
 
         let mut body_docs = vec![];
-        struct_expression.elements.iter().for_each(|(key, value)| {
-            body_docs.push(Doc::Group(vec![
-                self.pop_comment(&key, false),
-                Doc::Text(key.lexeme.to_string()),
-                Doc::Text(": ".to_string()),
-                self.visit_expression(value),
-                Doc::Text(",".to_string()),
-                Doc::BreakableSpace,
-            ]));
-        });
+        while let Some((key, value)) = it.next() {
+            body_docs.push(self.pop_comment(&key, true));
+            body_docs.push(Doc::Text(key.lexeme.to_string()));
+            body_docs.push(Doc::Text(": ".to_string()));
+            body_docs.push(self.visit_expression(value));
+
+            if it.peek().is_some() {
+                body_docs.push(Doc::Text(",".to_string()));
+                body_docs.push(Doc::BreakableSpace);
+            }
+        }
         docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
         docs.push(self.pop_closing_comment(&struct_expression.right_brace));
-        docs.push(Doc::Line);
+
+        docs.push(Doc::BreakableSpace);
         docs.push(Doc::Text("}".to_string()));
 
         Doc::Group(docs)
@@ -614,8 +597,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&variable_declaration.name, true));
         docs.push(Doc::Text(variable_declaration.name.lexeme.to_string()));
         docs.push(self.pop_comment(&variable_declaration.equals_token, true));
-        docs.push(Doc::Text(" =".to_string()));
-        docs.push(Doc::BreakableSpace);
+        docs.push(Doc::Text(" = ".to_string()));
         docs.push(self.visit_expression(&variable_declaration.value));
         Doc::Group(docs)
     }
