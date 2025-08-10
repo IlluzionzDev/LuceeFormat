@@ -81,15 +81,13 @@ impl DocFormatter {
                 self.current_line_length = self.current_indent;
             }
             Doc::Indent(doc) => {
+                self.current_indent += self.indent_size;
                 if !is_flat {
                     self.current_line_length += self.indent_size;
-                    self.current_indent += self.indent_size;
                     self.output.extend(iter::repeat(' ').take(self.indent_size));
-                    self.write_doc(doc, is_flat);
-                    self.current_indent -= self.indent_size;
-                } else {
-                    self.write_doc(doc, is_flat);
                 }
+                self.write_doc(doc, is_flat);
+                self.current_indent -= self.indent_size;
             }
             Doc::Docs(docs) => {
                 for doc in docs {
@@ -452,7 +450,6 @@ impl Visitor<Doc> for Formatter {
 
         Doc::Group(docs)
     }
-    // TODO: Inline short lambdas where it has one statement in the body
     fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) -> Doc {
         let mut docs = vec![];
         if lambda_expression.left_paren.is_some() {
@@ -462,8 +459,10 @@ impl Visitor<Doc> for Formatter {
                 !self.beginning_statement,
             ));
         }
-        docs.push(Doc::Text("(".to_string()));
-        docs.push(Doc::Line);
+
+        let mut full_args_docs = vec![];
+        full_args_docs.push(Doc::Text("(".to_string()));
+        full_args_docs.push(Doc::Line);
 
         let mut it = lambda_expression.parameters.iter().peekable();
 
@@ -480,12 +479,15 @@ impl Visitor<Doc> for Formatter {
                 arg_docs.push(Doc::BreakableSpace);
             }
         }
-        docs.push(Doc::Indent(Box::new(Doc::Group(arg_docs))));
+        full_args_docs.push(Doc::Indent(Box::new(Doc::Group(arg_docs))));
 
         if lambda_expression.right_paren.is_some() {
-            docs.push(self.pop_comment(&lambda_expression.right_paren.clone().unwrap(), true));
+            full_args_docs
+                .push(self.pop_comment(&lambda_expression.right_paren.clone().unwrap(), true));
         }
-        docs.push(Doc::Text(") ".to_string()));
+        full_args_docs.push(Doc::Line);
+        full_args_docs.push(Doc::Text(") ".to_string()));
+        docs.push(Doc::Group(full_args_docs));
 
         docs.push(self.pop_comment(&lambda_expression.lambda_token, true));
         docs.push(Doc::Text("=> ".to_string()));
@@ -493,24 +495,43 @@ impl Visitor<Doc> for Formatter {
         if lambda_expression.left_brace.is_some() {
             docs.push(self.pop_comment(&lambda_expression.left_brace.clone().unwrap(), true));
         }
-        docs.push(Doc::Text("{".to_string()));
-        docs.push(Doc::Line);
+
+        let mut full_body_docs = vec![];
+        full_body_docs.push(Doc::Text("{".to_string()));
 
         self.collapse_whitespace = true;
         let mut body_docs = vec![];
+        if lambda_expression.body.len() > 1 {
+            body_docs.push(Doc::HardLine);
+        } else {
+            body_docs.push(Doc::BreakableSpace);
+        }
         lambda_expression.body.iter().for_each(|body| {
-            body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+            body_docs.push(self.visit_statement(body));
+            if lambda_expression.body.len() > 1 {
+                body_docs.push(Doc::HardLine);
+            } else {
+                body_docs.push(Doc::Line);
+            }
         });
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        body_docs.remove(body_docs.len() - 1); // Remove last line break
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
         if lambda_expression.right_brace.is_some() {
-            docs.push(self.pop_closing_comment(&lambda_expression.right_brace.clone().unwrap()));
+            full_body_docs
+                .push(self.pop_closing_comment(&lambda_expression.right_brace.clone().unwrap()));
         }
-        docs.push(Doc::Line);
-        docs.push(Doc::Text("}".to_string()));
+        if lambda_expression.body.len() > 1 {
+            full_body_docs.push(Doc::HardLine);
+        } else {
+            full_body_docs.push(Doc::BreakableSpace);
+        }
+        full_body_docs.push(Doc::Text("}".to_string()));
+        docs.push(Doc::Group(full_body_docs));
 
         Doc::Group(docs)
     }
+    // TODO: Need to wrap binary expressions that are too long
     fn visit_binary_expression(&mut self, binary_expression: &crate::ast::BinaryExpression) -> Doc {
         let mut docs = vec![];
         docs.push(self.visit_expression(&binary_expression.left));
@@ -531,7 +552,6 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.visit_expression(&unary_expression.expr));
         Doc::Group(docs)
     }
-    // TODO: Handle wrapping for long chaining
     fn visit_ternary_expression(
         &mut self,
         ternary_expression: &crate::ast::TernaryExpression,
@@ -539,13 +559,17 @@ impl Visitor<Doc> for Formatter {
         let mut docs = vec![];
         docs.push(self.visit_expression(&ternary_expression.condition));
         docs.push(self.pop_comment(&ternary_expression.question_token, true));
-        docs.push(Doc::Text(" ?".to_string()));
         docs.push(Doc::BreakableSpace);
-        docs.push(self.visit_expression(&ternary_expression.true_expr));
-        docs.push(self.pop_comment(&ternary_expression.colon_token, true));
-        docs.push(Doc::Text(" :".to_string()));
-        docs.push(Doc::BreakableSpace);
-        docs.push(self.visit_expression(&ternary_expression.false_expr));
+
+        docs.push(Doc::Indent(Box::new(Doc::Group(vec![
+            Doc::Text("? ".to_string()),
+            self.visit_expression(&ternary_expression.true_expr),
+            self.pop_comment(&ternary_expression.colon_token, true),
+            Doc::BreakableSpace,
+            Doc::Text(": ".to_string()),
+            self.visit_expression(&ternary_expression.false_expr),
+        ]))));
+
         Doc::Group(docs)
     }
     fn visit_group_expression(&mut self, group_expression: &crate::ast::GroupExpression) -> Doc {
@@ -562,6 +586,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Text(")".to_string()));
         Doc::Group(docs)
     }
+    // TODO: Figure out how to properly wrap
     fn visit_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) -> Doc {
         let mut docs = vec![];
         docs.push(self.visit_expression(&member_expression.object));
@@ -571,6 +596,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.visit_expression(&member_expression.property));
         Doc::Group(docs)
     }
+    // TODO: Figure out how to properly wrap
     fn visit_index_access(&mut self, index_access: &crate::ast::IndexAccess) -> Doc {
         let mut docs = vec![];
         docs.push(self.visit_expression(&index_access.object));
@@ -608,8 +634,7 @@ impl Visitor<Doc> for Formatter {
         let mut docs = vec![];
         docs.push(self.visit_expression(&variable_assignment.name));
         docs.push(self.pop_comment(&variable_assignment.equals_token, true));
-        docs.push(Doc::Text(" =".to_string()));
-        docs.push(Doc::BreakableSpace);
+        docs.push(Doc::Text(" = ".to_string()));
         docs.push(self.visit_expression(&variable_assignment.value));
         Doc::Group(docs)
     }
@@ -680,11 +705,14 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("function ".to_string()));
-        docs.push(self.pop_comment(&function_definition.name, true));
-        docs.push(Doc::Text(function_definition.name.lexeme.to_string()));
-        docs.push(self.pop_comment(&function_definition.left_paren, true));
-        docs.push(Doc::Text("(".to_string()));
-        docs.push(Doc::Line);
+
+        let mut arg_docs = vec![];
+
+        arg_docs.push(self.pop_comment(&function_definition.name, true));
+        arg_docs.push(Doc::Text(function_definition.name.lexeme.to_string()));
+        arg_docs.push(self.pop_comment(&function_definition.left_paren, true));
+        arg_docs.push(Doc::Text("(".to_string()));
+        arg_docs.push(Doc::Line);
 
         let mut it = function_definition.parameters.iter().peekable();
 
@@ -715,32 +743,41 @@ impl Visitor<Doc> for Formatter {
                 None => {}
             }
 
-            if it.peek().is_some() {
-                param_doc.push(Doc::Text(",".to_string()));
-                param_doc.push(Doc::BreakableSpace);
-            }
             param_docs.push(Doc::Group(param_doc));
-        }
-        docs.push(Doc::Indent(Box::new(Doc::Group(param_docs))));
 
-        docs.push(self.pop_comment(&function_definition.right_paren, true));
-        docs.push(Doc::Text(") ".to_string()));
-        docs.push(self.pop_comment(&function_definition.left_brace, true));
-        docs.push(Doc::Text("{".to_string()));
+            if it.peek().is_some() {
+                param_docs.push(Doc::Text(",".to_string()));
+                param_docs.push(Doc::BreakableSpace);
+            }
+        }
+        arg_docs.push(Doc::Indent(Box::new(Doc::Group(param_docs))));
+
+        arg_docs.push(self.pop_comment(&function_definition.right_paren, true));
+        arg_docs.push(Doc::Line);
+        arg_docs.push(Doc::Text(") ".to_string()));
+        docs.push(Doc::Group(arg_docs));
+
+        let mut full_body_docs = vec![];
+        full_body_docs.push(self.pop_comment(&function_definition.left_brace, true));
+        full_body_docs.push(Doc::Text("{".to_string()));
 
         self.collapse_whitespace = true;
         let mut body_docs = vec![Doc::HardLine];
         function_definition.body.iter().for_each(|body| {
             body_docs.push(self.visit_statement(body));
             body_docs.push(Doc::HardLine);
-            // body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
         });
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        body_docs.remove(body_docs.len() - 1); // Remove last line break
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        docs.push(self.pop_closing_comment(&function_definition.right_brace));
-        docs.push(Doc::Text("}".to_string()));
+        full_body_docs.push(self.pop_closing_comment(&function_definition.right_brace));
+        full_body_docs.push(Doc::HardLine);
+        full_body_docs.push(Doc::Text("}".to_string()));
+        docs.push(Doc::Group(full_body_docs));
         Doc::Group(docs)
     }
+
+    // TODO: Revisit best way to wrap attributes
     fn visit_component_definition(
         &mut self,
         component_definition: &crate::ast::ComponentDefinition,
@@ -753,21 +790,31 @@ impl Visitor<Doc> for Formatter {
         ));
         self.beginning_statement = false;
 
-        docs.push(Doc::Text("component ".to_string()));
+        let mut name_group = vec![];
+        name_group.push(Doc::Text("component".to_string()));
+        name_group.push(Doc::BreakableSpace);
 
+        let mut arg_docs = vec![];
         component_definition
             .attributes
             .iter()
             .for_each(|attribute| {
-                docs.push(self.pop_comment(&attribute.0, true));
-                docs.push(Doc::Text(attribute.0.lexeme.to_string()));
-                docs.push(Doc::Text("=".to_string()));
-                docs.push(self.visit_expression(&attribute.1));
-                docs.push(Doc::Text(" ".to_string()));
+                arg_docs.push(self.pop_comment(&attribute.0, true));
+                arg_docs.push(Doc::Text(attribute.0.lexeme.to_string()));
+                arg_docs.push(Doc::Text("=".to_string()));
+                arg_docs.push(self.visit_expression(&attribute.1));
+                arg_docs.push(Doc::BreakableSpace);
             });
+        if !arg_docs.is_empty() {
+            arg_docs.remove(arg_docs.len() - 1); // Remove last line break
+            arg_docs.push(Doc::Text(" ".to_string()));
+        }
+        name_group.push(Doc::Indent(Box::new(Doc::Group(arg_docs))));
 
-        docs.push(self.pop_comment(&component_definition.left_brace, true));
+        name_group.push(self.pop_comment(&component_definition.left_brace, true));
+        docs.push(Doc::Group(name_group));
         docs.push(Doc::Text("{".to_string()));
+
         docs.push(Doc::HardLine);
         docs.push(Doc::HardLine);
 
@@ -791,8 +838,9 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&lucee_function.name, !self.beginning_statement));
         self.beginning_statement = false;
 
-        docs.push(Doc::Text(lucee_function.name.lexeme.to_string()));
-        docs.push(Doc::Text(" ".to_string()));
+        let mut name_group = vec![];
+        name_group.push(Doc::Text(lucee_function.name.lexeme.to_string()));
+        name_group.push(Doc::BreakableSpace);
 
         let mut param_docs = vec![];
         lucee_function.attributes.iter().for_each(|attribute| {
@@ -802,7 +850,12 @@ impl Visitor<Doc> for Formatter {
             param_docs.push(self.visit_expression(&attribute.1));
             param_docs.push(Doc::BreakableSpace);
         });
-        docs.push(Doc::Group(param_docs));
+        if !param_docs.is_empty() {
+            param_docs.remove(param_docs.len() - 1); // Remove last line break
+            param_docs.push(Doc::Text(" ".to_string()));
+        }
+        name_group.push(Doc::Indent(Box::new(Doc::Group(param_docs))));
+        docs.push(Doc::Group(name_group));
 
         match &lucee_function.body {
             Some(body) => {
@@ -814,8 +867,10 @@ impl Visitor<Doc> for Formatter {
                 self.collapse_whitespace = true;
                 let mut body_docs = vec![];
                 body.iter().for_each(|body| {
-                    body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+                    body_docs.push(self.visit_statement(body));
+                    body_docs.push(Doc::HardLine);
                 });
+                body_docs.remove(body_docs.len() - 1); // Remove last line break
                 docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
                 if lucee_function.right_brace.is_some() {
                     docs.push(
@@ -842,8 +897,8 @@ impl Visitor<Doc> for Formatter {
         test_group.push(Doc::Text("if ".to_string()));
         test_group.push(self.pop_comment(&if_statement.left_paren, true));
         test_group.push(Doc::Text("(".to_string()));
+        test_group.push(Doc::Line);
         test_group.push(Doc::Indent(Box::new(Doc::Group(vec![
-            Doc::Line,
             self.visit_expression(&if_statement.condition),
             self.pop_comment(&if_statement.right_paren, true),
         ]))));
@@ -957,6 +1012,7 @@ impl Visitor<Doc> for Formatter {
 
         Doc::Group(docs)
     }
+    // TODO: HERE
     fn visit_for_statement(&mut self, for_statement: &crate::ast::ForStatement) -> Doc {
         let mut docs = vec![];
         docs.push(self.pop_whitespace(&for_statement.for_token));
