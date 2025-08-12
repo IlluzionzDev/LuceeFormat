@@ -24,3 +24,8 @@ complex rules, and just runs through tokens in microseconds.
 - Arena allocator for AST nodes
 - Line breaks with '// comments' as "inline" comments should preserve line breaks
 - Handle ++ printing
+- Handle static access '::' operator
+- Handle function lambdas, e.g inline 'function(arg1, arg2) {}'
+- Currently comments pop whitespace correctly, but statements collapse whitespace after comment (should collapse to 1
+  not entirely)
+- Fix popping comments with newlines (Use Doc nodes instead of hard coding \n)

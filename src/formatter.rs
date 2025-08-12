@@ -1,6 +1,7 @@
-use crate::ast::{AccessModifier, ForControl, LiteralValue, Statement, AST};
+use crate::ast::{AccessModifier, BinaryOperator, ForControl, LiteralValue, Statement, AST};
 use crate::lexer::Token;
 use crate::visitor::Visitor;
+use std::cmp::PartialEq;
 use std::iter;
 
 #[derive(Clone, Debug)]
@@ -534,12 +535,21 @@ impl Visitor<Doc> for Formatter {
     // TODO: Need to wrap binary expressions that are too long
     fn visit_binary_expression(&mut self, binary_expression: &crate::ast::BinaryExpression) -> Doc {
         let mut docs = vec![];
-        docs.push(self.visit_expression(&binary_expression.left));
-        docs.push(Doc::Text(" ".to_string()));
-        docs.push(self.pop_comment(&binary_expression.op, true));
-        docs.push(Doc::Text(binary_expression.op.lexeme.to_string()));
-        docs.push(Doc::Text(" ".to_string()));
-        docs.push(self.visit_expression(&binary_expression.right));
+        if (binary_expression.op.to_binary_op() == BinaryOperator::PlusPlus
+            || binary_expression.op.to_binary_op() == BinaryOperator::MinusMinus)
+        {
+            docs.push(self.visit_expression(&binary_expression.left));
+            docs.push(self.pop_comment(&binary_expression.op, true));
+            docs.push(Doc::Text(binary_expression.op.lexeme.to_string()));
+        } else {
+            docs.push(self.visit_expression(&binary_expression.left));
+            docs.push(Doc::Text(" ".to_string()));
+            docs.push(self.pop_comment(&binary_expression.op, true));
+            docs.push(Doc::Text(binary_expression.op.lexeme.to_string()));
+            docs.push(Doc::Text(" ".to_string()));
+            docs.push(self.visit_expression(&binary_expression.right));
+        }
+
         Doc::Group(docs)
     }
     fn visit_unary_expression(&mut self, unary_expression: &crate::ast::UnaryExpression) -> Doc {
@@ -928,7 +938,9 @@ impl Visitor<Doc> for Formatter {
                 body_docs.push(Doc::Line);
             }
         });
-        body_docs.remove(body_docs.len() - 1); // Remove last line break
+        if !body_docs.is_empty() {
+            body_docs.remove(body_docs.len() - 1); // Remove last line break
+        }
         full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
         if if_statement.right_brace.is_some() {
@@ -1012,17 +1024,17 @@ impl Visitor<Doc> for Formatter {
 
         Doc::Group(docs)
     }
-    // TODO: HERE
     fn visit_for_statement(&mut self, for_statement: &crate::ast::ForStatement) -> Doc {
         let mut docs = vec![];
         docs.push(self.pop_whitespace(&for_statement.for_token));
         docs.push(self.pop_comment(&for_statement.for_token, !self.beginning_statement));
         self.beginning_statement = false;
 
-        docs.push(Doc::Text("for ".to_string()));
-        docs.push(self.pop_comment(&for_statement.left_paren, true));
-        docs.push(Doc::Text("(".to_string()));
-        docs.push(Doc::Line);
+        let mut arg_docs = vec![];
+        arg_docs.push(Doc::Text("for ".to_string()));
+        arg_docs.push(self.pop_comment(&for_statement.left_paren, true));
+        arg_docs.push(Doc::Text("(".to_string()));
+        arg_docs.push(Doc::Line);
 
         // Print control
         match &for_statement.control {
@@ -1049,7 +1061,7 @@ impl Visitor<Doc> for Formatter {
                 control_docs.push(self.visit_expression(condition));
                 control_docs.push(Doc::Text("; ".to_string()));
                 control_docs.push(self.visit_expression(increment));
-                docs.push(Doc::Indent(Box::new(Doc::Group(control_docs))));
+                arg_docs.push(Doc::Indent(Box::new(Doc::Group(control_docs))));
             }
             ForControl::LoopOver {
                 var_token,
@@ -1068,29 +1080,42 @@ impl Visitor<Doc> for Formatter {
                 control_docs.push(self.pop_comment(&in_token, true));
                 control_docs.push(Doc::Text(" in ".to_string()));
                 control_docs.push(self.visit_expression(array));
-                docs.push(Doc::Indent(Box::new(Doc::Group(control_docs))));
+                arg_docs.push(Doc::Indent(Box::new(Doc::Group(control_docs))));
             }
         }
 
-        docs.push(self.pop_comment(&for_statement.right_paren, true));
-        docs.push(Doc::Line);
-        docs.push(Doc::Text(") ".to_string()));
+        arg_docs.push(self.pop_comment(&for_statement.right_paren, true));
+        arg_docs.push(Doc::Line);
+        arg_docs.push(Doc::Text(") ".to_string()));
+        docs.push(Doc::Group(arg_docs));
+
         docs.push(self.pop_comment(&for_statement.left_brace, true));
-        docs.push(Doc::Text("{".to_string()));
-        docs.push(Doc::Line);
+
+        let mut full_body_docs = vec![];
+
+        full_body_docs.push(Doc::Text("{".to_string()));
+        full_body_docs.push(Doc::HardLine);
 
         self.collapse_whitespace = true;
         let mut body_docs = vec![];
         for_statement.body.iter().for_each(|body| {
-            body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+            body_docs.push(self.visit_statement(body));
+            body_docs.push(Doc::HardLine);
         });
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        if !body_docs.is_empty() {
+            body_docs.remove(body_docs.len() - 1); // Remove last line break
+        }
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        docs.push(self.pop_closing_comment(&for_statement.right_brace));
-        docs.push(Doc::Line);
-        docs.push(Doc::Text("}".to_string()));
+        full_body_docs.push(self.pop_closing_comment(&for_statement.right_brace));
+        full_body_docs.push(Doc::Line);
+        full_body_docs.push(Doc::Text("}".to_string()));
+        docs.push(Doc::Group(full_body_docs));
+
         Doc::Group(docs)
     }
+
+    // TODO: HERE
     fn visit_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) -> Doc {
         let mut docs = vec![];
         if (while_statement.do_while) {

@@ -203,22 +203,22 @@ impl<'ast> Parser<'ast> {
             }));
         }
 
-        // Shorthand increments, ++ or --
-        // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
-        if self.check(TokenType::PlusPlus) || self.check(TokenType::MinusMinus) {
-            let op = self.advance().clone();
-            self.advance_check(TokenType::Semicolon);
-            return Statement::ExpressionStmt(Rc::new(Expression::BinaryExpression(Rc::new(
-                BinaryExpression {
-                    left: expression,
-                    op: op.clone(),
-                    right: Expression::Literal(Rc::new(Literal {
-                        value: LiteralValue::Number(1.0),
-                        token: op.clone(),
-                    })),
-                },
-            ))));
-        }
+        // // Shorthand increments, ++ or --
+        // // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
+        // if self.check(TokenType::PlusPlus) || self.check(TokenType::MinusMinus) {
+        //     let op = self.advance().clone();
+        //     self.advance_check(TokenType::Semicolon);
+        //     return Statement::ExpressionStmt(Rc::new(Expression::BinaryExpression(Rc::new(
+        //         BinaryExpression {
+        //             left: expression,
+        //             op: op.clone(),
+        //             right: Expression::Literal(Rc::new(Literal {
+        //                 value: LiteralValue::Number(1.0),
+        //                 token: op.clone(),
+        //             })),
+        //         },
+        //     ))));
+        // }
 
         match expression {
             Expression::None => {
@@ -773,6 +773,22 @@ impl<'ast> Parser<'ast> {
                 }
             }
             _ => {}
+        }
+
+        // Shorthand increments, ++ or --
+        // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
+        // TODO: Seperate into postExpression term?
+        if self.check(TokenType::PlusPlus) || self.check(TokenType::MinusMinus) {
+            let op = self.advance().clone();
+            self.advance_check(TokenType::Semicolon);
+            return Expression::BinaryExpression(Rc::new(BinaryExpression {
+                left: expression,
+                op: op.clone(),
+                right: Expression::Literal(Rc::new(Literal {
+                    value: LiteralValue::Number(1.0),
+                    token: op.clone(),
+                })),
+            }));
         }
 
         expression

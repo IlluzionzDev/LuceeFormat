@@ -166,6 +166,9 @@ impl Token<'_> {
             TokenType::Slash => BinaryOperator::Divide,
             TokenType::StarEqual => BinaryOperator::MultiplyEqual,
             TokenType::SlashEqual => BinaryOperator::DivideEqual,
+
+            TokenType::MinusMinus => BinaryOperator::MinusMinus,
+            TokenType::PlusPlus => BinaryOperator::PlusPlus,
             _ => {
                 panic!("Token {:?} is not a valid binary operator", self.token_type);
             }

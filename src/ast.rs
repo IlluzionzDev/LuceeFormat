@@ -321,6 +321,12 @@ pub enum BinaryOperator {
     ConcatEqual,
 }
 
+impl PartialEq<Self> for BinaryOperator {
+    fn eq(&self, other: &Self) -> bool {
+        return self.to_lexeme().eq(other.to_lexeme());
+    }
+}
+
 impl BinaryOperator {
     pub fn to_lexeme(&self) -> &'static str {
         match self {
