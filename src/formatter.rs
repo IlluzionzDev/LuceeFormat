@@ -1261,58 +1261,82 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("try ".to_string()));
-        docs.push(self.pop_comment(&try_catch_statement.try_left_brace, true));
-        docs.push(Doc::Text("{".to_string()));
-        docs.push(Doc::Line);
+
+        let mut full_body_docs = vec![];
+        full_body_docs.push(self.pop_comment(&try_catch_statement.try_left_brace, true));
+        full_body_docs.push(Doc::Text("{".to_string()));
+        full_body_docs.push(Doc::HardLine);
 
         self.collapse_whitespace = true;
         let mut body_docs = vec![];
         try_catch_statement.try_body.iter().for_each(|body| {
-            body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+            body_docs.push(self.visit_statement(body));
+            body_docs.push(Doc::HardLine);
         });
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        if !body_docs.is_empty() {
+            body_docs.remove(body_docs.len() - 1); // Remove last line break
+        }
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        docs.push(self.pop_closing_comment(&try_catch_statement.try_right_brace));
-        docs.push(Doc::Line);
-        docs.push(Doc::Text("}".to_string()));
-        docs.push(self.pop_comment(&try_catch_statement.catch_token, true));
-        docs.push(Doc::Text("catch ".to_string()));
-        docs.push(self.pop_comment(&try_catch_statement.left_paren, true));
-        docs.push(Doc::Text("(".to_string()));
+        full_body_docs.push(self.pop_closing_comment(&try_catch_statement.try_right_brace));
+        full_body_docs.push(Doc::Line);
+        full_body_docs.push(Doc::Text("}".to_string()));
 
+        docs.push(Doc::Group(full_body_docs));
+
+        let mut catch_docs = vec![];
+        catch_docs.push(self.pop_comment(&try_catch_statement.catch_token, true));
+        catch_docs.push(Doc::Text(" catch ".to_string()));
+        catch_docs.push(self.pop_comment(&try_catch_statement.left_paren, true));
+        catch_docs.push(Doc::Text("(".to_string()));
+        catch_docs.push(Doc::Line);
+
+        let mut catch_expression_docs = vec![];
         match &try_catch_statement.catch_var_token {
             Some(var_token) => {
-                docs.push(self.pop_comment(var_token, true));
+                catch_expression_docs.push(self.pop_comment(var_token, true));
             }
             None => {}
         }
 
         match &try_catch_statement.catch_var_type {
             Some(var_type) => {
-                docs.push(self.visit_expression(var_type));
-                docs.push(Doc::Text(" ".to_string()));
+                catch_expression_docs.push(self.visit_expression(var_type));
+                catch_expression_docs.push(Doc::Text(" ".to_string()));
             }
             None => {}
         }
-        docs.push(self.pop_comment(&try_catch_statement.catch_var, true));
-        docs.push(Doc::Text(try_catch_statement.catch_var.lexeme.to_string()));
+        catch_expression_docs.push(self.pop_comment(&try_catch_statement.catch_var, true));
+        catch_expression_docs.push(Doc::Text(try_catch_statement.catch_var.lexeme.to_string()));
 
-        docs.push(self.pop_comment(&try_catch_statement.right_paren, true));
-        docs.push(Doc::Text(") ".to_string()));
-        docs.push(self.pop_comment(&try_catch_statement.catch_left_brace, true));
-        docs.push(Doc::Text("{".to_string()));
-        docs.push(Doc::Line);
+        catch_docs.push(Doc::Indent(Box::new(Doc::Group(catch_expression_docs))));
+
+        catch_docs.push(self.pop_comment(&try_catch_statement.right_paren, true));
+        catch_docs.push(Doc::Line);
+        catch_docs.push(Doc::Text(") ".to_string()));
+
+        docs.push(Doc::Group(catch_docs));
+
+        let mut catch_body_docs = vec![];
+        catch_body_docs.push(self.pop_comment(&try_catch_statement.catch_left_brace, true));
+        catch_body_docs.push(Doc::Text("{".to_string()));
+        catch_body_docs.push(Doc::HardLine);
 
         self.collapse_whitespace = true;
         let mut catch_docs = vec![];
         try_catch_statement.catch_body.iter().for_each(|body| {
-            catch_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+            catch_docs.push(self.visit_statement(body));
+            catch_docs.push(Doc::HardLine);
         });
-        docs.push(Doc::Indent(Box::new(Doc::Group(catch_docs))));
+        if !catch_docs.is_empty() {
+            catch_docs.remove(catch_docs.len() - 1); // Remove last line break
+        }
+        catch_body_docs.push(Doc::Indent(Box::new(Doc::Group(catch_docs))));
 
-        docs.push(self.pop_closing_comment(&try_catch_statement.catch_right_brace));
-        docs.push(Doc::Line);
-        docs.push(Doc::Text("}".to_string()));
+        catch_body_docs.push(self.pop_closing_comment(&try_catch_statement.catch_right_brace));
+        catch_body_docs.push(Doc::HardLine);
+        catch_body_docs.push(Doc::Text("}".to_string()));
+        docs.push(Doc::Group(catch_body_docs));
         Doc::Group(docs)
     }
 }
