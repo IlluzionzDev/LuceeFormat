@@ -850,7 +850,7 @@ impl Visitor<Doc> for Formatter {
 
         let mut name_group = vec![];
         name_group.push(Doc::Text(lucee_function.name.lexeme.to_string()));
-        name_group.push(Doc::BreakableSpace);
+        name_group.push(Doc::Line);
 
         let mut param_docs = vec![];
         lucee_function.attributes.iter().for_each(|attribute| {
@@ -1191,19 +1191,24 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&switch_statement.switch_token, !self.beginning_statement));
         self.beginning_statement = false;
 
-        docs.push(Doc::Text("switch ".to_string()));
-        docs.push(self.pop_comment(&switch_statement.left_paren, true));
-        docs.push(Doc::Text("(".to_string()));
-        docs.push(Doc::Line);
-        docs.push(Doc::Indent(Box::new(
+        let mut switch_docs = vec![];
+        switch_docs.push(Doc::Text("switch ".to_string()));
+        switch_docs.push(self.pop_comment(&switch_statement.left_paren, true));
+        switch_docs.push(Doc::Text("(".to_string()));
+        switch_docs.push(Doc::Line);
+        switch_docs.push(Doc::Indent(Box::new(
             self.visit_expression(&switch_statement.expression),
         )));
-        docs.push(Doc::Line);
-        docs.push(self.pop_comment(&switch_statement.right_paren, true));
-        docs.push(Doc::Text(") ".to_string()));
-        docs.push(self.pop_comment(&switch_statement.left_brace, true));
-        docs.push(Doc::Text("{".to_string()));
-        docs.push(Doc::HardLine);
+        switch_docs.push(Doc::Line);
+        switch_docs.push(self.pop_comment(&switch_statement.right_paren, true));
+        switch_docs.push(Doc::Text(") ".to_string()));
+        switch_docs.push(self.pop_comment(&switch_statement.left_brace, true));
+
+        docs.push(Doc::Group(switch_docs));
+
+        let mut full_body_docs = vec![];
+        full_body_docs.push(Doc::Text("{".to_string()));
+        // full_body_docs.push(Doc::HardLine);
 
         self.collapse_whitespace = true;
         let mut body_docs = vec![];
@@ -1230,15 +1235,20 @@ impl Visitor<Doc> for Formatter {
             self.collapse_whitespace = true;
             let mut inner_docs = vec![];
             case.body.iter().for_each(|body| {
-                inner_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+                inner_docs.push(self.visit_statement(body));
+                inner_docs.push(Doc::HardLine);
             });
+            if !inner_docs.is_empty() {
+                inner_docs.remove(inner_docs.len() - 1); // Remove last line break
+            }
             body_docs.push(Doc::Indent(Box::new(Doc::Group(inner_docs))));
         });
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        docs.push(self.pop_closing_comment(&switch_statement.right_brace));
-        docs.push(Doc::HardLine);
-        docs.push(Doc::Text("}".to_string()));
+        full_body_docs.push(self.pop_closing_comment(&switch_statement.right_brace));
+        full_body_docs.push(Doc::HardLine);
+        full_body_docs.push(Doc::Text("}".to_string()));
+        docs.push(Doc::Group(full_body_docs));
         Doc::Group(docs)
     }
     fn visit_try_catch_statement(
