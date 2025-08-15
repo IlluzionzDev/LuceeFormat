@@ -1115,9 +1115,9 @@ impl Visitor<Doc> for Formatter {
         Doc::Group(docs)
     }
 
-    // TODO: HERE
     fn visit_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) -> Doc {
         let mut docs = vec![];
+        let mut full_body_docs = vec![];
         if (while_statement.do_while) {
             if while_statement.do_token.is_some() {
                 docs.push(self.pop_whitespace(&while_statement.do_token.clone().unwrap()));
@@ -1128,53 +1128,63 @@ impl Visitor<Doc> for Formatter {
                 self.beginning_statement = false;
             }
             docs.push(Doc::Text("do ".to_string()));
-            docs.push(self.pop_comment(&while_statement.left_brace, true));
-            docs.push(Doc::Text("{".to_string()));
+            full_body_docs.push(self.pop_comment(&while_statement.left_brace, true));
+            full_body_docs.push(Doc::Text("{".to_string()));
         } else {
             docs.push(self.pop_whitespace(&while_statement.while_token));
             docs.push(self.pop_comment(&while_statement.while_token, !self.beginning_statement));
             self.beginning_statement = false;
 
-            docs.push(Doc::Text("while (".to_string()));
-            docs.push(Doc::Line);
-            docs.push(Doc::Indent(Box::new(
+            let mut while_docs = vec![];
+            while_docs.push(Doc::Text("while (".to_string()));
+            while_docs.push(Doc::Line);
+            while_docs.push(Doc::Indent(Box::new(
                 self.visit_expression(&while_statement.condition),
             )));
-            docs.push(self.pop_comment(&while_statement.left_paren, true));
-            docs.push(Doc::Line);
-            docs.push(Doc::Text(") ".to_string()));
-            docs.push(self.pop_comment(&while_statement.left_brace, true));
-            docs.push(Doc::Text("{".to_string()));
+            while_docs.push(self.pop_comment(&while_statement.left_paren, true));
+            while_docs.push(Doc::Line);
+            while_docs.push(Doc::Text(") ".to_string()));
+            docs.push(Doc::Group(while_docs));
+            full_body_docs.push(self.pop_comment(&while_statement.left_brace, true));
+            full_body_docs.push(Doc::Text("{".to_string()));
         }
-
-        docs.push(Doc::Line);
 
         self.collapse_whitespace = true;
         let mut body_docs = vec![];
+        body_docs.push(Doc::HardLine);
         while_statement.body.iter().for_each(|body| {
-            body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+            body_docs.push(self.visit_statement(body));
+            body_docs.push(Doc::HardLine);
         });
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        if !body_docs.is_empty() {
+            body_docs.remove(body_docs.len() - 1); // Remove last line break
+        }
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        docs.push(self.pop_closing_comment(&while_statement.right_brace));
-        docs.push(Doc::Line);
-        docs.push(Doc::Text("}".to_string()));
+        full_body_docs.push(self.pop_closing_comment(&while_statement.right_brace));
+        full_body_docs.push(Doc::HardLine);
+        full_body_docs.push(Doc::Text("}".to_string()));
+
+        docs.push(Doc::Group(full_body_docs));
 
         if while_statement.do_while {
             docs.push(self.pop_comment(&while_statement.while_token, true));
-            docs.push(Doc::Text(" while ".to_string()));
-            docs.push(self.pop_comment(&while_statement.left_paren, true));
-            docs.push(Doc::Text("(".to_string()));
-            docs.push(Doc::Line);
-            docs.push(Doc::Indent(Box::new(
+
+            let mut while_docs = vec![];
+            while_docs.push(Doc::Text(" while (".to_string()));
+            while_docs.push(Doc::Line);
+            while_docs.push(Doc::Indent(Box::new(
                 self.visit_expression(&while_statement.condition),
             )));
-            docs.push(self.pop_comment(&while_statement.right_paren, true));
-            docs.push(Doc::Line);
-            docs.push(Doc::Text(")".to_string()));
+            while_docs.push(self.pop_comment(&while_statement.left_paren, true));
+            while_docs.push(Doc::Line);
+            while_docs.push(Doc::Text(")".to_string()));
+            docs.push(Doc::Group(while_docs));
         }
         Doc::Group(docs)
     }
+
+    // TODO: HERE
     fn visit_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) -> Doc {
         let mut docs = vec![];
         docs.push(self.pop_whitespace(&switch_statement.switch_token));
