@@ -165,8 +165,6 @@ impl Formatter {
         allow_compact: bool,
     ) -> Doc {
         let mut full_body_docs = vec![];
-        self.collapse_whitespace = true;
-
         // Add opening brace with comments
         if let Some(left_brace_token) = left_brace {
             full_body_docs.push(self.pop_comment(left_brace_token, true));
@@ -175,6 +173,7 @@ impl Formatter {
 
         // Set up body formatting
         let mut body_docs = vec![];
+        self.collapse_whitespace = true;
 
         // Determine if we should use compact formatting
         let use_compact = allow_compact && body.len() == 1;
@@ -240,6 +239,8 @@ impl Formatter {
     fn pop_whitespace(&mut self, token: &Token) -> Doc {
         let blank_lines = token.lines_before;
         let mut emit_space = false;
+
+        // Only emit space if we have blank lines AND we're not collapsing whitespace AND it's a beginning statement
         if blank_lines > 0 && !self.collapse_whitespace && self.beginning_statement {
             emit_space = true;
         }
@@ -401,8 +402,8 @@ impl Visitor<Doc> for Formatter {
 
     fn visit_literal(&mut self, literal: &crate::ast::Literal) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&literal.token));
         docs.push(self.pop_comment(&literal.token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&literal.token));
         self.beginning_statement = false;
 
         let literal_value = &literal.value;
@@ -418,8 +419,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_identifier(&mut self, identifier: &Token) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(identifier));
         docs.push(self.pop_comment(identifier, !self.beginning_statement));
+        docs.push(self.pop_whitespace(identifier));
         self.beginning_statement = false;
         docs.push(Doc::Text(identifier.lexeme.to_string()));
         Doc::Group(docs)
@@ -464,8 +465,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_object_creation(&mut self, object_creation: &crate::ast::ObjectCreation) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&object_creation.new_token));
         docs.push(self.pop_comment(&object_creation.new_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&object_creation.new_token));
         self.beginning_statement = false;
 
         docs.push(Doc::Text("new ".to_string()));
@@ -475,8 +476,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_array_expression(&mut self, array_expression: &crate::ast::ArrayExpression) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&array_expression.left_bracket));
         docs.push(self.pop_comment(&array_expression.left_bracket, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&array_expression.left_bracket));
         self.beginning_statement = false;
 
         docs.push(Doc::Text("[".to_string()));
@@ -503,8 +504,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_struct_expression(&mut self, struct_expression: &crate::ast::StructExpression) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&struct_expression.left_brace));
         docs.push(self.pop_comment(&struct_expression.left_brace, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&struct_expression.left_brace));
         self.beginning_statement = false;
 
         docs.push(Doc::Text("{".to_string()));
@@ -536,11 +537,11 @@ impl Visitor<Doc> for Formatter {
     fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) -> Doc {
         let mut docs = vec![];
         if lambda_expression.left_paren.is_some() {
-            docs.push(self.pop_whitespace(&lambda_expression.left_paren.clone().unwrap()));
             docs.push(self.pop_comment(
                 &lambda_expression.left_paren.clone().unwrap(),
                 !self.beginning_statement,
             ));
+            docs.push(self.pop_whitespace(&lambda_expression.left_paren.clone().unwrap()));
         }
 
         let mut full_args_docs = vec![];
@@ -551,8 +552,8 @@ impl Visitor<Doc> for Formatter {
 
         let mut arg_docs = vec![];
         while let Some(arg) = it.next() {
-            arg_docs.push(self.pop_whitespace(&arg));
             arg_docs.push(self.pop_comment(&arg, !self.beginning_statement));
+            arg_docs.push(self.pop_whitespace(&arg));
             self.beginning_statement = false;
 
             arg_docs.push(Doc::Text(arg.lexeme.to_string()));
@@ -606,8 +607,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_unary_expression(&mut self, unary_expression: &crate::ast::UnaryExpression) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&unary_expression.op));
         docs.push(self.pop_comment(&unary_expression.op, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&unary_expression.op));
         self.beginning_statement = false;
 
         docs.push(Doc::Text(unary_expression.op.lexeme.to_string()));
@@ -636,8 +637,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_group_expression(&mut self, group_expression: &crate::ast::GroupExpression) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&group_expression.left_paren));
         docs.push(self.pop_comment(&group_expression.left_paren, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&group_expression.left_paren));
         self.beginning_statement = false;
 
         docs.push(Doc::Text("(".to_string()));
@@ -677,8 +678,8 @@ impl Visitor<Doc> for Formatter {
         variable_declaration: &crate::ast::VariableDeclaration,
     ) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&variable_declaration.var_token));
         docs.push(self.pop_comment(&variable_declaration.var_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&variable_declaration.var_token));
         self.beginning_statement = false;
 
         docs.push(Doc::Text("var ".to_string()));
@@ -702,8 +703,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&return_statement.return_token));
         docs.push(self.pop_comment(&return_statement.return_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&return_statement.return_token));
         self.beginning_statement = false;
 
         docs.push(Doc::Text("return ".to_string()));
@@ -720,15 +721,16 @@ impl Visitor<Doc> for Formatter {
         let mut docs = vec![];
         match &function_definition.access_modifier {
             Some(access_modifier) => {
+                docs.push(self.pop_comment(
+                    &function_definition.access_modifier_token.clone().unwrap(),
+                    !self.beginning_statement,
+                ));
                 docs.push(
                     self.pop_whitespace(
                         &function_definition.access_modifier_token.clone().unwrap(),
                     ),
                 );
-                docs.push(self.pop_comment(
-                    &function_definition.access_modifier_token.clone().unwrap(),
-                    !self.beginning_statement,
-                ));
+
                 self.beginning_statement = false;
 
                 docs.push(Doc::Text(
@@ -746,11 +748,12 @@ impl Visitor<Doc> for Formatter {
 
         match &function_definition.return_type {
             Some(return_type) => {
-                docs.push(self.pop_whitespace(&function_definition.return_type.clone().unwrap()));
                 docs.push(self.pop_comment(
                     &function_definition.return_type.clone().unwrap(),
                     !self.beginning_statement,
                 ));
+                docs.push(self.pop_whitespace(&function_definition.return_type.clone().unwrap()));
+
                 self.beginning_statement = false;
 
                 docs.push(Doc::Text(return_type.lexeme.to_string()));
@@ -759,11 +762,11 @@ impl Visitor<Doc> for Formatter {
             None => {}
         }
 
-        docs.push(self.pop_whitespace(&function_definition.function_token));
         docs.push(self.pop_comment(
             &function_definition.function_token,
             !self.beginning_statement,
         ));
+        docs.push(self.pop_whitespace(&function_definition.function_token));
         self.beginning_statement = false;
 
         docs.push(Doc::Text("function ".to_string()));
@@ -834,11 +837,11 @@ impl Visitor<Doc> for Formatter {
         component_definition: &crate::ast::ComponentDefinition,
     ) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&component_definition.component_token));
         docs.push(self.pop_comment(
             &component_definition.component_token,
             !self.beginning_statement,
         ));
+        docs.push(self.pop_whitespace(&component_definition.component_token));
         self.beginning_statement = false;
 
         let mut name_group = vec![];
@@ -893,8 +896,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&lucee_function.name));
         docs.push(self.pop_comment(&lucee_function.name, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&lucee_function.name));
         self.beginning_statement = false;
 
         let mut name_group = vec![];
@@ -934,8 +937,8 @@ impl Visitor<Doc> for Formatter {
     // TODO: Inline short single statement if statements
     fn visit_if_statement(&mut self, if_statement: &crate::ast::IfStatement) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&if_statement.if_token));
         docs.push(self.pop_comment(&if_statement.if_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&if_statement.if_token));
         self.beginning_statement = false;
 
         let mut test_group = vec![];
@@ -1001,8 +1004,8 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_for_statement(&mut self, for_statement: &crate::ast::ForStatement) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&for_statement.for_token));
         docs.push(self.pop_comment(&for_statement.for_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&for_statement.for_token));
         self.beginning_statement = false;
 
         let mut arg_docs = vec![];
@@ -1078,17 +1081,17 @@ impl Visitor<Doc> for Formatter {
         let mut docs = vec![];
         if (while_statement.do_while) {
             if while_statement.do_token.is_some() {
-                docs.push(self.pop_whitespace(&while_statement.do_token.clone().unwrap()));
                 docs.push(self.pop_comment(
                     &while_statement.do_token.clone().unwrap(),
                     !self.beginning_statement,
                 ));
+                docs.push(self.pop_whitespace(&while_statement.do_token.clone().unwrap()));
                 self.beginning_statement = false;
             }
             docs.push(Doc::Text("do ".to_string()));
         } else {
-            docs.push(self.pop_whitespace(&while_statement.while_token));
             docs.push(self.pop_comment(&while_statement.while_token, !self.beginning_statement));
+            docs.push(self.pop_whitespace(&while_statement.while_token));
             self.beginning_statement = false;
 
             let mut while_docs = vec![];
@@ -1130,8 +1133,8 @@ impl Visitor<Doc> for Formatter {
 
     fn visit_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) -> Doc {
         let mut docs = vec![];
-        docs.push(self.pop_whitespace(&switch_statement.switch_token));
         docs.push(self.pop_comment(&switch_statement.switch_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&switch_statement.switch_token));
         self.beginning_statement = false;
 
         let mut switch_docs = vec![];
@@ -1208,8 +1211,8 @@ impl Visitor<Doc> for Formatter {
         try_catch_statement: &crate::ast::TryCatchStatement,
     ) -> Doc {
         let mut docs: Vec<Doc> = vec![];
-        docs.push(self.pop_whitespace(&try_catch_statement.try_token));
         docs.push(self.pop_comment(&try_catch_statement.try_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&try_catch_statement.try_token));
         self.beginning_statement = false;
 
         docs.push(Doc::Text("try ".to_string()));
