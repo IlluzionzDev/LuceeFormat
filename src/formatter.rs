@@ -229,12 +229,6 @@ impl Formatter {
         Doc::Group(full_body_docs)
     }
 
-    fn add_current_indent(&mut self) {
-        for _ in 0..self.indent_level {
-            self.formatted_source.push_str("    ");
-        }
-    }
-
     /// Process lines before on a token, and prints 1 newline if there was a blank whitespace
     fn pop_whitespace(&mut self, token: &Token) -> Doc {
         let blank_lines = token.lines_before;
@@ -312,19 +306,6 @@ impl Formatter {
                                 docs.push(Doc::HardLine);
                             }
                         }
-
-                        // self.add_current_indent();
-
-                        // if !inline {
-                        //     // For closing comments, we don't call add_current_indent() since indentation
-                        //     // is handled by the Doc system when the comment is inside an Indent node
-                        //     if !extra_indent {
-                        //         self.add_current_indent();
-                        //     }
-                        // } else {
-                        //     docs.push(Doc::Text(String::from(" ")));
-                        //     docs.push(Doc::BreakableSpace);
-                        // }
                     }
                 }
             }
