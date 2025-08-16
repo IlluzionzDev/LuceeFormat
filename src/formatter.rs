@@ -151,7 +151,7 @@ impl Formatter {
     }
 
     /// Formats a statement body with braces, handling compact single-line vs multi-line formatting
-    /// 
+    ///
     /// Parameters:
     /// - body: The statements to format inside the braces
     /// - left_brace: Optional left brace token for comment processing
@@ -165,7 +165,7 @@ impl Formatter {
         allow_compact: bool,
     ) -> Doc {
         let mut full_body_docs = vec![];
-        
+
         // Add opening brace with comments
         if let Some(left_brace_token) = left_brace {
             full_body_docs.push(self.pop_comment(left_brace_token, true));
@@ -175,10 +175,10 @@ impl Formatter {
         // Set up body formatting
         self.collapse_whitespace = true;
         let mut body_docs = vec![];
-        
+
         // Determine if we should use compact formatting
         let use_compact = allow_compact && body.len() == 1;
-        
+
         // Add initial spacing
         if use_compact {
             body_docs.push(Doc::BreakableSpace);
@@ -198,24 +198,33 @@ impl Formatter {
 
         // Remove the last line break if there are statements
         if !body_docs.is_empty() {
-            body_docs.remove(body_docs.len() - 1);
+            // Always remove trailing HardLine to avoid extra blank lines
+            if let Some(Doc::HardLine) = body_docs.last() {
+                body_docs.remove(body_docs.len() - 1);
+            }
+        }
+
+        // Add closing brace comments as part of the body content (after removing trailing line breaks)
+        if let Some(right_brace_token) = right_brace {
+            if right_brace_token.comments.is_some() {
+                // Add a line break before the closing comment to separate it from the last statement
+                body_docs.push(Doc::HardLine);
+                let closing_comment = self.pop_closing_comment(right_brace_token);
+                // Add the closing comment to the body docs so it gets proper indentation
+                body_docs.push(closing_comment);
+            }
         }
 
         // Wrap body in indented group
         full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        // Add closing brace with comments
-        if let Some(right_brace_token) = right_brace {
-            full_body_docs.push(self.pop_closing_comment(right_brace_token));
-        }
-        
         // Add spacing before closing brace
         if use_compact {
             full_body_docs.push(Doc::BreakableSpace);
         } else {
             full_body_docs.push(Doc::HardLine);
         }
-        
+
         full_body_docs.push(Doc::Text("}".to_string()));
 
         Doc::Group(full_body_docs)
@@ -264,27 +273,26 @@ impl Formatter {
 
         if let Some(comments) = &token.comments {
             for comment in comments {
-                if extra_indent {
-                    let old_indent = self.indent_level;
-                    self.indent_level = 1; // Reset indent for right brace comment
-                    self.add_current_indent();
-                    self.indent_level = old_indent; // Restore indent level
-                }
-
                 docs.push(self.pop_whitespace(comment));
 
                 // Store formatted comment in the formatter to extend its lifetime
                 let formatted_comment = self.format_comment(&comment.lexeme);
 
-                for line in formatted_comment.lines() {
+                let comment_lines: Vec<&str> = formatted_comment.lines().collect();
+                for (i, line) in comment_lines.iter().enumerate() {
                     docs.push(Doc::Text(String::from(line.trim_end())));
-                    if !inline {
+                    // For closing comments, don't add HardLine after the last line to prevent extra blank lines
+                    if !inline && !(extra_indent && i == comment_lines.len() - 1) {
                         docs.push(Doc::HardLine);
                     }
                 }
 
                 if !inline {
-                    self.add_current_indent();
+                    // For closing comments, we don't call add_current_indent() since indentation
+                    // is handled by the Doc system when the comment is inside an Indent node
+                    if !extra_indent {
+                        self.add_current_indent();
+                    }
                 } else {
                     docs.push(Doc::Text(String::from(" ")));
                     docs.push(Doc::BreakableSpace);
@@ -568,7 +576,7 @@ impl Visitor<Doc> for Formatter {
             &lambda_expression.body,
             lambda_expression.left_brace.as_ref(),
             lambda_expression.right_brace.as_ref(),
-            true // lambda expressions can use compact formatting
+            true, // lambda expressions can use compact formatting
         ));
 
         Doc::Group(docs)
@@ -812,7 +820,7 @@ impl Visitor<Doc> for Formatter {
             &function_definition.body,
             Some(&function_definition.left_brace),
             Some(&function_definition.right_brace),
-            false // function bodies don't use compact formatting
+            false, // function bodies don't use compact formatting
         ));
         Doc::Group(docs)
     }
@@ -903,7 +911,7 @@ impl Visitor<Doc> for Formatter {
                     body,
                     lucee_function.left_brace.as_ref(),
                     lucee_function.right_brace.as_ref(),
-                    false // lucee functions don't use compact formatting
+                    false, // lucee functions don't use compact formatting
                 ));
             }
             None => {}
@@ -938,8 +946,8 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.format_statement_body(
             &if_statement.body,
             if_statement.left_brace.as_ref(),
-            if_statement.right_brace.as_ref(), 
-            true // allow compact formatting for single statements
+            if_statement.right_brace.as_ref(),
+            true, // allow compact formatting for single statements
         ));
 
         match &if_statement.else_body {
@@ -970,7 +978,7 @@ impl Visitor<Doc> for Formatter {
                             else_body,
                             if_statement.else_left_brace.as_ref(),
                             if_statement.else_right_brace.as_ref(),
-                            true // allow compact formatting for single statements
+                            true, // allow compact formatting for single statements
                         ));
                     }
                 }
@@ -1049,7 +1057,7 @@ impl Visitor<Doc> for Formatter {
             &for_statement.body,
             Some(&for_statement.left_brace),
             Some(&for_statement.right_brace),
-            false // for loops don't use compact formatting
+            false, // for loops don't use compact formatting
         ));
 
         Doc::Group(docs)
@@ -1088,7 +1096,7 @@ impl Visitor<Doc> for Formatter {
             &while_statement.body,
             Some(&while_statement.left_brace),
             Some(&while_statement.right_brace),
-            false // while loops don't use compact formatting
+            false, // while loops don't use compact formatting
         );
         docs.push(body_doc);
 
@@ -1191,7 +1199,7 @@ impl Visitor<Doc> for Formatter {
             &try_catch_statement.try_body,
             Some(&try_catch_statement.try_left_brace),
             Some(&try_catch_statement.try_right_brace),
-            false // try blocks don't use compact formatting
+            false, // try blocks don't use compact formatting
         ));
 
         let mut catch_docs = vec![];
@@ -1231,7 +1239,7 @@ impl Visitor<Doc> for Formatter {
             &try_catch_statement.catch_body,
             Some(&try_catch_statement.catch_left_brace),
             Some(&try_catch_statement.catch_right_brace),
-            false // catch blocks don't use compact formatting
+            false, // catch blocks don't use compact formatting
         ));
         Doc::Group(docs)
     }
