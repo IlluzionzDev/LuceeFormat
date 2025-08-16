@@ -277,7 +277,7 @@ impl Formatter {
                 // Handle different comment types
                 match comment.comment_type {
                     CommentType::Trailing => {
-                        println!("[Formatter] Trailing comment: {}", comment.token.lexeme);
+                        // println!("[Formatter] Trailing comment: {}", comment.token.lexeme);
                         // For trailing comments, add a single space and format inline
                         docs.push(Doc::Text(String::from(" ")));
 
@@ -287,7 +287,7 @@ impl Formatter {
                         // No line breaks for trailing comments
                     }
                     CommentType::Inline => {
-                        println!("[Formatter] Inline comment: {}", comment.token.lexeme);
+                        // println!("[Formatter] Inline comment: {}", comment.token.lexeme);
                         // For inline comments, add space before and after (similar to trailing but maybe different spacing)
                         docs.push(Doc::Text(String::from(" ")));
                         let formatted_comment = self.format_comment(&comment.token.lexeme);
@@ -551,9 +551,16 @@ impl Visitor<Doc> for Formatter {
                 body_docs.push(Doc::BreakableSpace);
             }
         }
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        docs.push(self.pop_closing_comment(&struct_expression.right_brace));
+        if struct_expression.right_brace.comments.is_some() {
+            // Add a line break before the closing comment to separate it from the last statement
+            body_docs.push(Doc::HardLine);
+            let closing_comment = self.pop_closing_comment(&struct_expression.right_brace);
+            // Add the closing comment to the body docs so it gets proper indentation
+            body_docs.push(closing_comment);
+        }
+
+        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
         docs.push(Doc::BreakableSpace);
         docs.push(Doc::Text("}".to_string()));
