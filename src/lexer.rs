@@ -4,6 +4,19 @@ use std::cmp::{max, min};
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
+pub enum CommentType {
+    Leading,  // Comments that appear before tokens (// comment or /* comment */)
+    Trailing, // Comments that appear after tokens on the same line (statement; // comment)
+    Inline,   // Comments that appear within expressions (var x = /* comment */ value)
+}
+
+#[derive(Debug, Clone)]
+pub struct Comment<'a> {
+    pub token: Token<'a>, // Contains the comment token with span information
+    pub comment_type: CommentType,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     // Single-character tokens
     LeftParen,
@@ -119,11 +132,11 @@ pub struct Token<'a> {
     pub column: usize,
     pub end_column: usize,
     pub span: SourceSpan,
-    /// A comment token that might appear before this token.
-    /// This is how we handle wacky inline comments and preserve comments in the AST
+    /// Comments associated with this token
+    /// This is how we handle different types of comments and preserve them in the AST
     /// This does mean in the AST we at minimum must store the tokens that make up
     /// statements. For example 'if (condition)' would store the token for 'if', '(', 'condition', and ')'
-    pub comments: Option<Vec<Token<'a>>>,
+    pub comments: Option<Vec<Comment<'a>>>,
     pub lines_before: i8, // Amount of blank lines (\n\n) before this token, used for collapsing whitespace
 }
 
@@ -198,10 +211,13 @@ pub(crate) struct Lexer<'a> {
     end_column: usize,
 
     // Current comments to append to next read token
-    pub pop_comments: Option<Vec<Token<'a>>>,
+    pub pop_comments: Option<Vec<Comment<'a>>>,
 
     // Keep track of new lines to attach to token info
     pub pop_lines: i8,
+
+    // Track the line of the last non-comment/non-whitespace token for trailing comment detection
+    last_token_line: usize,
 }
 
 static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
@@ -273,6 +289,7 @@ impl<'a> Lexer<'a> {
             end_column: 1,
             pop_comments: None,
             pop_lines: 0,
+            last_token_line: 0,
         }
     }
 
@@ -410,9 +427,18 @@ impl<'a> Lexer<'a> {
                             self.advance();
                         }
 
-                        let mut lines_before = max(0, self.pop_lines - 1);
+                        let lines_before = max(0, self.pop_lines - 1);
                         self.pop_lines = 0;
-                        let _ = &self.pop_comments.get_or_insert_with(Vec::new).push(Token {
+
+                        // Detect comment type based on position
+                        let comment_type =
+                            if self.line == self.last_token_line && self.last_token_line > 0 {
+                                CommentType::Trailing
+                            } else {
+                                CommentType::Leading
+                            };
+
+                        let comment_token = Token {
                             token_type: TokenType::Comment,
                             lexeme: &self.source[self.start..self.current],
                             line: self.line,
@@ -424,7 +450,14 @@ impl<'a> Lexer<'a> {
                             },
                             comments: None,
                             lines_before,
-                        });
+                        };
+
+                        let comment = Comment {
+                            token: comment_token,
+                            comment_type,
+                        };
+
+                        let _ = &self.pop_comments.get_or_insert_with(Vec::new).push(comment);
 
                         continue;
                     } else if self.match_char('*') {
@@ -439,9 +472,18 @@ impl<'a> Lexer<'a> {
                         self.advance();
                         self.advance();
 
-                        let mut lines_before = max(0, self.pop_lines - 1);
+                        let lines_before = max(0, self.pop_lines - 1);
                         self.pop_lines = 0;
-                        let _ = &self.pop_comments.get_or_insert_with(Vec::new).push(Token {
+
+                        // Detect comment type based on position
+                        let comment_type =
+                            if self.line == self.last_token_line && self.last_token_line > 0 {
+                                CommentType::Inline
+                            } else {
+                                CommentType::Leading
+                            };
+
+                        let comment_token = Token {
                             token_type: TokenType::Comment,
                             lexeme: &self.source[self.start..self.current],
                             line: self.line,
@@ -453,7 +495,14 @@ impl<'a> Lexer<'a> {
                             },
                             comments: None,
                             lines_before,
-                        });
+                        };
+
+                        let comment = Comment {
+                            token: comment_token,
+                            comment_type,
+                        };
+
+                        let _ = &self.pop_comments.get_or_insert_with(Vec::new).push(comment);
 
                         continue;
                     } else {
@@ -596,6 +645,13 @@ impl<'a> Lexer<'a> {
         }
         let mut lines_before = max(0, self.pop_lines - 1);
         self.pop_lines = 0;
+
+        // Update last token line for trailing comment detection
+        // Only update for non-EOF tokens
+        if token_type != TokenType::EOF {
+            self.last_token_line = self.line;
+        }
+
         Token {
             token_type,
             lexeme: literal,

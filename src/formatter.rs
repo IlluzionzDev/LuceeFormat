@@ -1,5 +1,5 @@
 use crate::ast::{AccessModifier, BinaryOperator, ForControl, LiteralValue, Statement, AST};
-use crate::lexer::Token;
+use crate::lexer::{CommentType, Token};
 use crate::visitor::Visitor;
 use std::cmp::PartialEq;
 use std::iter;
@@ -274,32 +274,58 @@ impl Formatter {
 
         if let Some(comments) = &token.comments {
             for (comment_idx, comment) in comments.iter().enumerate() {
-                docs.push(self.pop_whitespace(comment));
+                // Handle different comment types
+                match comment.comment_type {
+                    CommentType::Trailing => {
+                        println!("[Formatter] Trailing comment: {}", comment.token.lexeme);
+                        // For trailing comments, add a single space and format inline
+                        docs.push(Doc::Text(String::from(" ")));
 
-                // Store formatted comment in the formatter to extend its lifetime
-                let formatted_comment = self.format_comment(&comment.lexeme);
-
-                let comment_lines: Vec<&str> = formatted_comment.lines().collect();
-                for (i, line) in comment_lines.iter().enumerate() {
-                    docs.push(Doc::Text(String::from(line.trim_end())));
-                    // Add HardLine after each line except for the last line of the last comment when extra_indent is true
-                    let is_last_line_of_comment = i == comment_lines.len() - 1;
-                    let is_last_comment = comment_idx == comments.len() - 1;
-
-                    if !inline && !(extra_indent && is_last_line_of_comment && is_last_comment) {
-                        docs.push(Doc::HardLine);
+                        // Store formatted comment in the formatter to extend its lifetime
+                        let formatted_comment = self.format_comment(&comment.token.lexeme);
+                        docs.push(Doc::Text(String::from(formatted_comment.trim_end())));
+                        // No line breaks for trailing comments
                     }
-                }
-
-                if !inline {
-                    // For closing comments, we don't call add_current_indent() since indentation
-                    // is handled by the Doc system when the comment is inside an Indent node
-                    if !extra_indent {
-                        self.add_current_indent();
+                    CommentType::Inline => {
+                        println!("[Formatter] Inline comment: {}", comment.token.lexeme);
+                        // For inline comments, add space before and after (similar to trailing but maybe different spacing)
+                        docs.push(Doc::Text(String::from(" ")));
+                        let formatted_comment = self.format_comment(&comment.token.lexeme);
+                        docs.push(Doc::Text(String::from(formatted_comment.trim_end())));
+                        docs.push(Doc::Text(String::from(" ")));
                     }
-                } else {
-                    docs.push(Doc::Text(String::from(" ")));
-                    docs.push(Doc::BreakableSpace);
+                    CommentType::Leading => {
+                        // Regular leading comment handling
+                        docs.push(self.pop_whitespace(&comment.token));
+
+                        // Store formatted comment in the formatter to extend its lifetime
+                        let formatted_comment = self.format_comment(&comment.token.lexeme);
+
+                        let comment_lines: Vec<&str> = formatted_comment.lines().collect();
+                        for (i, line) in comment_lines.iter().enumerate() {
+                            docs.push(Doc::Text(String::from(line.trim_end())));
+                            // Add HardLine after each line except for the last line of the last comment when extra_indent is true
+                            let is_last_line_of_comment = i == comment_lines.len() - 1;
+                            let is_last_comment = comment_idx == comments.len() - 1;
+
+                            if !(extra_indent && is_last_line_of_comment && is_last_comment) {
+                                docs.push(Doc::HardLine);
+                            }
+                        }
+
+                        // self.add_current_indent();
+
+                        // if !inline {
+                        //     // For closing comments, we don't call add_current_indent() since indentation
+                        //     // is handled by the Doc system when the comment is inside an Indent node
+                        //     if !extra_indent {
+                        //         self.add_current_indent();
+                        //     }
+                        // } else {
+                        //     docs.push(Doc::Text(String::from(" ")));
+                        //     docs.push(Doc::BreakableSpace);
+                        // }
+                    }
                 }
             }
         }

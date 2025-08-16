@@ -80,9 +80,7 @@ fn test_nested_if_statements() {
             return "nested";
         }
     }"#;
-    let expected = r#"if (outer) {
-    if (inner) { return "nested" }
-}"#;
+    let expected = r#"if (outer) { if (inner) { return "nested" } }"#;
 
     assert_formats_to(input, expected);
 }
