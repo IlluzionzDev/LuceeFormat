@@ -165,6 +165,7 @@ impl Formatter {
         allow_compact: bool,
     ) -> Doc {
         let mut full_body_docs = vec![];
+        self.collapse_whitespace = true;
 
         // Add opening brace with comments
         if let Some(left_brace_token) = left_brace {
@@ -173,7 +174,6 @@ impl Formatter {
         full_body_docs.push(Doc::Text("{".to_string()));
 
         // Set up body formatting
-        self.collapse_whitespace = true;
         let mut body_docs = vec![];
 
         // Determine if we should use compact formatting
@@ -1174,11 +1174,20 @@ impl Visitor<Doc> for Formatter {
             if !inner_docs.is_empty() {
                 inner_docs.remove(inner_docs.len() - 1); // Remove last line break
             }
+
             body_docs.push(Doc::Indent(Box::new(Doc::Group(inner_docs))));
         });
+
+        if switch_statement.right_brace.comments.is_some() {
+            // Add a line break before the closing comment to separate it from the last statement
+            body_docs.push(Doc::HardLine);
+            let closing_comment = self.pop_closing_comment(&switch_statement.right_brace);
+            // Add the closing comment to the body docs so it gets proper indentation
+            body_docs.push(closing_comment);
+        }
+
         full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        full_body_docs.push(self.pop_closing_comment(&switch_statement.right_brace));
         full_body_docs.push(Doc::HardLine);
         full_body_docs.push(Doc::Text("}".to_string()));
         docs.push(Doc::Group(full_body_docs));
