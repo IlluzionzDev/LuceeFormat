@@ -272,7 +272,7 @@ impl Formatter {
         let mut docs = vec![];
 
         if let Some(comments) = &token.comments {
-            for comment in comments {
+            for (comment_idx, comment) in comments.iter().enumerate() {
                 docs.push(self.pop_whitespace(comment));
 
                 // Store formatted comment in the formatter to extend its lifetime
@@ -281,8 +281,11 @@ impl Formatter {
                 let comment_lines: Vec<&str> = formatted_comment.lines().collect();
                 for (i, line) in comment_lines.iter().enumerate() {
                     docs.push(Doc::Text(String::from(line.trim_end())));
-                    // For closing comments, don't add HardLine after the last line to prevent extra blank lines
-                    if !inline && !(extra_indent && i == comment_lines.len() - 1) {
+                    // Add HardLine after each line except for the last line of the last comment when extra_indent is true
+                    let is_last_line_of_comment = i == comment_lines.len() - 1;
+                    let is_last_comment = comment_idx == comments.len() - 1;
+
+                    if !inline && !(extra_indent && is_last_line_of_comment && is_last_comment) {
                         docs.push(Doc::HardLine);
                     }
                 }
@@ -873,9 +876,17 @@ impl Visitor<Doc> for Formatter {
 
             body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
         });
+
+        if component_definition.right_brace.comments.is_some() {
+            // Add a line break before the closing comment to separate it from the last statement
+            body_docs.push(Doc::HardLine);
+            let closing_comment = self.pop_closing_comment(&component_definition.right_brace);
+            // Add the closing comment to the body docs so it gets proper indentation
+            body_docs.push(closing_comment);
+        }
+
         docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        docs.push(self.pop_closing_comment(&component_definition.right_brace));
         docs.push(Doc::HardLine);
         docs.push(Doc::Text("}".to_string()));
         Doc::Group(docs)
@@ -1117,7 +1128,6 @@ impl Visitor<Doc> for Formatter {
         Doc::Group(docs)
     }
 
-    // TODO: HERE
     fn visit_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) -> Doc {
         let mut docs = vec![];
         docs.push(self.pop_whitespace(&switch_statement.switch_token));
