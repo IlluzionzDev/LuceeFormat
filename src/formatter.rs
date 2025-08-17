@@ -496,7 +496,14 @@ impl Visitor<Doc> for Formatter {
             full_arg_docs.push(Doc::Group(arg_docs));
 
             if it.peek().is_some() {
+                if let Some(comma) = &arg.2 {
+                    full_arg_docs.push(self.pop_comment(comma, true));
+                }
                 full_arg_docs.push(Doc::Text(",".to_string()));
+                if let Some(comma) = &arg.2 {
+                    full_arg_docs.push(self.pop_trailing_comments(comma));
+                }
+
                 full_arg_docs.push(Doc::BreakableSpace);
             }
         }

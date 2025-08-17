@@ -141,7 +141,8 @@ pub struct FunctionCall<'ast> {
     pub name: Expression<'ast>,
     pub left_paren: Token<'ast>,
     pub right_paren: Token<'ast>,
-    pub args: Vec<(Option<Token<'ast>>, Expression<'ast>)>,
+    // 1: Identifier, 2: Expression, 3: Optional comma
+    pub args: Vec<(Option<Token<'ast>>, Expression<'ast>, Option<Token<'ast>>)>,
 }
 
 impl<'ast, T> Walkable<T> for FunctionCall<'ast> {

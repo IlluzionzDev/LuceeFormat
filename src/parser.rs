@@ -1186,15 +1186,31 @@ impl<'ast> Parser<'ast> {
                     self.consume(TokenType::Equal, "Expected '='");
 
                     let value = self.expression();
+                    
+                    // Check for comma token
+                    let comma_token = if self.check(TokenType::Comma) {
+                        Some(self.advance().clone())
+                    } else {
+                        None
+                    };
 
-                    arguments.push((Some(name), value));
+                    arguments.push((Some(name), value, comma_token));
                 } else {
                     // Unnamed argument
-                    arguments.push((None, self.expression()));
+                    let expr = self.expression();
+                    
+                    // Check for comma token
+                    let comma_token = if self.check(TokenType::Comma) {
+                        Some(self.advance().clone())
+                    } else {
+                        None
+                    };
+                    
+                    arguments.push((None, expr, comma_token));
                 }
 
-                // If comma, keep parsing, or stop if encountered ')'
-                if !self.advance_check(TokenType::Comma) || self.check(TokenType::RightParen) {
+                // If we didn't consume a comma above, or we hit the right paren, break
+                if arguments.last().unwrap().2.is_none() || self.check(TokenType::RightParen) {
                     break;
                 }
             }
