@@ -523,6 +523,7 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("new ".to_string()));
+        docs.push(self.pop_trailing_comments(&object_creation.new_token));
         docs.push(self.visit_expression(&object_creation.expr));
 
         Doc::Group(docs)
@@ -537,18 +538,21 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_trailing_comments(&array_expression.left_bracket));
         docs.push(Doc::Line);
 
+        let mut it = array_expression.elements.iter().peekable();
+
         let mut args_docs = vec![];
-        for (i, (element, comma_token)) in array_expression.elements.iter().enumerate() {
-            args_docs.push(self.visit_expression(element));
+        while let Some((arg, comma_token)) = it.next() {
+            args_docs.push(self.visit_expression(arg));
 
-            if let Some(comma) = comma_token {
-                args_docs.push(Doc::Text(",".to_string()));
-                args_docs.push(self.pop_trailing_comments(comma));
-
-                // Add space if not the last element
-                if i < array_expression.elements.len() - 1 {
-                    args_docs.push(Doc::BreakableSpace);
+            if it.peek().is_some() {
+                if let Some(comma) = comma_token {
+                    args_docs.push(self.pop_comment(comma, true));
                 }
+                args_docs.push(Doc::Text(",".to_string()));
+                if let Some(comma) = comma_token {
+                    args_docs.push(self.pop_trailing_comments(comma));
+                }
+                args_docs.push(Doc::BreakableSpace);
             }
         }
         docs.push(Doc::Indent(Box::new(Doc::Group(args_docs))));

@@ -1186,7 +1186,7 @@ impl<'ast> Parser<'ast> {
                     self.consume(TokenType::Equal, "Expected '='");
 
                     let value = self.expression();
-                    
+
                     // Check for comma token
                     let comma_token = if self.check(TokenType::Comma) {
                         Some(self.advance().clone())
@@ -1198,14 +1198,14 @@ impl<'ast> Parser<'ast> {
                 } else {
                     // Unnamed argument
                     let expr = self.expression();
-                    
+
                     // Check for comma token
                     let comma_token = if self.check(TokenType::Comma) {
                         Some(self.advance().clone())
                     } else {
                         None
                     };
-                    
+
                     arguments.push((None, expr, comma_token));
                 }
 
