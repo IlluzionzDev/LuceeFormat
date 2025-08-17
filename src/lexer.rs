@@ -1,7 +1,9 @@
 use crate::ast::{BinaryOperator, UnaryOperator};
 use phf::phf_map;
+use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum CommentType {
@@ -137,6 +139,8 @@ pub struct Token<'a> {
     /// This does mean in the AST we at minimum must store the tokens that make up
     /// statements. For example 'if (condition)' would store the token for 'if', '(', 'condition', and ')'
     pub comments: Option<Vec<Comment<'a>>>,
+    /// Trailing comments that appear after this token on the same line
+    pub trailing_comments: Option<Vec<Comment<'a>>>,
     pub lines_before: i8, // Amount of blank lines (\n\n) before this token, used for collapsing whitespace
 }
 
@@ -213,6 +217,9 @@ pub(crate) struct Lexer<'a> {
     // Current comments to append to next read token
     pub pop_comments: Option<Vec<Comment<'a>>>,
 
+    // Trailing comments from previous token to be returned with next token
+    pub pop_trailing_comments: Option<Vec<Comment<'a>>>,
+
     // Keep track of new lines to attach to token info
     pub pop_lines: i8,
 
@@ -288,6 +295,7 @@ impl<'a> Lexer<'a> {
             column: 1,
             end_column: 1,
             pop_comments: None,
+            pop_trailing_comments: None,
             pop_lines: 0,
             last_token_line: 0,
         }
@@ -314,6 +322,7 @@ impl<'a> Lexer<'a> {
                         end: self.current,
                     },
                     comments: None,
+                    trailing_comments: None,
                     lines_before: self.pop_lines,
                 };
             }
@@ -449,6 +458,7 @@ impl<'a> Lexer<'a> {
                                 end: self.current,
                             },
                             comments: None,
+                            trailing_comments: None,
                             lines_before,
                         };
 
@@ -457,7 +467,15 @@ impl<'a> Lexer<'a> {
                             comment_type,
                         };
 
-                        let _ = &self.pop_comments.get_or_insert_with(Vec::new).push(comment);
+                        // If it's a trailing comment, add to trailing buffer; otherwise leading
+                        if comment_type == CommentType::Trailing {
+                            let _ = &self
+                                .pop_trailing_comments
+                                .get_or_insert_with(Vec::new)
+                                .push(comment);
+                        } else {
+                            let _ = &self.pop_comments.get_or_insert_with(Vec::new).push(comment);
+                        }
 
                         continue;
                     } else if self.match_char('*') {
@@ -494,6 +512,7 @@ impl<'a> Lexer<'a> {
                                 end: self.current,
                             },
                             comments: None,
+                            trailing_comments: None,
                             lines_before,
                         };
 
@@ -643,7 +662,17 @@ impl<'a> Lexer<'a> {
             }
             _ => {}
         }
-        let mut lines_before = max(0, self.pop_lines - 1);
+        // Get trailing comments for the previous token
+        let mut trailing_comments = None;
+        match &self.pop_trailing_comments {
+            Some(trailing) => {
+                trailing_comments = Some(trailing.clone());
+                self.pop_trailing_comments = None;
+            }
+            _ => {}
+        }
+
+        let lines_before = max(0, self.pop_lines - 1);
         self.pop_lines = 0;
 
         // Update last token line for trailing comment detection
@@ -663,6 +692,7 @@ impl<'a> Lexer<'a> {
                 end: self.current,
             },
             comments,
+            trailing_comments,
             lines_before,
         }
     }

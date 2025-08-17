@@ -22,7 +22,7 @@ impl<'ast, T> Walkable<T> for AST<'ast> {
 
 #[derive(Debug, Clone)]
 pub enum Statement<'ast> {
-    ExpressionStmt(Rc<Expression<'ast>>),
+    ExpressionStmt(Rc<ExpressionStatement<'ast>>),
     VariableDeclaration(Rc<VariableDeclaration<'ast>>),
     VariableAssignment(Rc<VariableAssignment<'ast>>),
     ReturnStatement(Rc<ReturnStatement<'ast>>),
@@ -43,11 +43,24 @@ impl<'ast, T> Walkable<T> for Statement<'ast> {
 }
 
 #[derive(Debug, Clone)]
+pub struct ExpressionStatement<'ast> {
+    pub expression: Expression<'ast>,
+    pub semicolon_token: Option<Token<'ast>>,
+}
+
+impl<'ast, T> Walkable<T> for ExpressionStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_expression_statement(self)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct VariableDeclaration<'ast> {
     pub var_token: Token<'ast>,
     pub name: Token<'ast>,
     pub equals_token: Token<'ast>,
     pub value: Expression<'ast>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
 impl<'ast, T> Walkable<T> for VariableDeclaration<'ast> {
@@ -61,6 +74,7 @@ pub struct VariableAssignment<'ast> {
     pub name: Expression<'ast>,
     pub equals_token: Token<'ast>,
     pub value: Expression<'ast>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
 impl<'ast, T> Walkable<T> for VariableAssignment<'ast> {
@@ -73,6 +87,7 @@ impl<'ast, T> Walkable<T> for VariableAssignment<'ast> {
 pub struct ReturnStatement<'ast> {
     pub return_token: Token<'ast>,
     pub value: Option<Expression<'ast>>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
 impl<'ast, T> Walkable<T> for ReturnStatement<'ast> {
@@ -88,6 +103,7 @@ pub struct LuceeFunction<'ast> {
     pub body: Option<Vec<Statement<'ast>>>,
     pub left_brace: Option<Token<'ast>>,
     pub right_brace: Option<Token<'ast>>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
 impl<'ast, T> Walkable<T> for LuceeFunction<'ast> {
@@ -150,7 +166,8 @@ impl<'ast, T> Walkable<T> for ObjectCreation<'ast> {
 pub struct ArrayExpression<'ast> {
     pub left_bracket: Token<'ast>,
     pub right_bracket: Token<'ast>,
-    pub elements: Vec<Expression<'ast>>,
+    // Each element may have a comma token after it (except the last one)
+    pub elements: Vec<(Expression<'ast>, Option<Token<'ast>>)>,
 }
 
 impl<'ast, T> Walkable<T> for ArrayExpression<'ast> {

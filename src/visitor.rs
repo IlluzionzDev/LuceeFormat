@@ -1,4 +1,4 @@
-use crate::ast::{Expression, ForControl, Statement, AST};
+use crate::ast::{Expression, ExpressionStatement, ForControl, Statement, AST};
 use crate::lexer::Token;
 
 pub trait VisitorResult {}
@@ -79,6 +79,12 @@ pub trait Visitor<T> {
         self.walk_index_access(index_access)
     }
 
+    fn visit_expression_statement(
+        &mut self,
+        expression_statement: &crate::ast::ExpressionStatement,
+    ) -> T {
+        self.walk_expression_statement(expression_statement)
+    }
     fn visit_variable_declaration(
         &mut self,
         variable_declaration: &crate::ast::VariableDeclaration,
@@ -137,7 +143,7 @@ pub trait Visitor<T> {
     /// Default implementations here are for common nodes that need walking
     fn walk_statement(&mut self, statement: &Statement) -> T {
         match statement {
-            Statement::ExpressionStmt(expression) => self.visit_expression(expression),
+            Statement::ExpressionStmt(expression_statement) => self.visit_expression_statement(expression_statement),
             Statement::VariableDeclaration(variable_declaration) => {
                 self.visit_variable_declaration(variable_declaration)
             }
@@ -218,7 +224,7 @@ pub trait Visitor<T> {
     fn walk_array_expression(&mut self, array_expression: &crate::ast::ArrayExpression) -> T {
         let mut docs = vec![];
         array_expression.elements.iter().for_each(|element| {
-            docs.push(self.visit_expression(element));
+            docs.push(self.visit_expression(&element.0));
         });
         self.combine_docs(&mut docs)
     }
@@ -264,6 +270,12 @@ pub trait Visitor<T> {
         self.combine_docs(&mut docs)
     }
 
+    fn walk_expression_statement(
+        &mut self,
+        expression_statement: &crate::ast::ExpressionStatement,
+    ) -> T {
+        self.visit_expression(&expression_statement.expression)
+    }
     fn walk_variable_declaration(
         &mut self,
         variable_declaration: &crate::ast::VariableDeclaration,

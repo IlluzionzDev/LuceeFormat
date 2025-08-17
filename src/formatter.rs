@@ -170,6 +170,9 @@ impl Formatter {
             full_body_docs.push(self.pop_comment(left_brace_token, true));
         }
         full_body_docs.push(Doc::Text("{".to_string()));
+        if let Some(left_brace_token) = left_brace {
+            full_body_docs.push(self.pop_trailing_comments(left_brace_token));
+        }
 
         // Set up body formatting
         let mut body_docs = vec![];
@@ -226,6 +229,10 @@ impl Formatter {
 
         full_body_docs.push(Doc::Text("}".to_string()));
 
+        if let Some(right_brace_token) = right_brace {
+            full_body_docs.push(self.pop_trailing_comments(right_brace_token));
+        }
+
         Doc::Group(full_body_docs)
     }
 
@@ -259,6 +266,33 @@ impl Formatter {
     /// Formats / pops comment on this token. Handles formatting indents, by stripping out newlines
     fn pop_comment(&mut self, token: &Token, inline: bool) -> Doc {
         self._pop_comment(token, inline, false)
+    }
+
+    /// Formats / pops trailing comments on this token.
+    /// Should be called after the token content has been processed
+    fn pop_trailing_comments(&mut self, token: &Token) -> Doc {
+        let mut docs = vec![];
+
+        if let Some(trailing_comments) = &token.trailing_comments {
+            for comment in trailing_comments {
+                // println!(
+                //     "[Formatter] Trailing comment: {0:?} for token {1:?}",
+                //     comment.token.lexeme, token
+                // );
+                match comment.comment_type {
+                    CommentType::Trailing => {
+                        // Add space before trailing comment
+                        docs.push(Doc::Text(" ".to_string()));
+                        let formatted_comment = self.format_comment(&comment.token.lexeme);
+                        docs.push(Doc::Text(formatted_comment.trim_end().to_string()));
+                        // Don't add line break for trailing comments - they stay on the same line
+                    }
+                    _ => {} // Only handle trailing comments here
+                }
+            }
+        }
+
+        Doc::Group(docs)
     }
 
     /// Formats / pops comment on this token. Handles formatting indents, by stripping out newlines
@@ -422,6 +456,7 @@ impl Visitor<Doc> for Formatter {
         };
 
         docs.push(Doc::Text(value));
+        docs.push(self.pop_trailing_comments(&literal.token));
         Doc::Group(docs)
     }
     fn visit_identifier(&mut self, identifier: &Token) -> Doc {
@@ -430,6 +465,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_whitespace(identifier));
         self.beginning_statement = false;
         docs.push(Doc::Text(identifier.lexeme.to_string()));
+        docs.push(self.pop_trailing_comments(identifier));
         Doc::Group(docs)
     }
     fn visit_function_call(&mut self, function_call: &crate::ast::FunctionCall) -> Doc {
@@ -437,6 +473,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.visit_expression(&function_call.name));
         docs.push(self.pop_comment(&function_call.left_paren, true));
         docs.push(Doc::Text("(".to_string()));
+        docs.push(self.pop_trailing_comments(&function_call.left_paren));
         docs.push(Doc::Line);
 
         let mut it = function_call.args.iter().peekable();
@@ -448,6 +485,7 @@ impl Visitor<Doc> for Formatter {
                 Some(token) => {
                     arg_docs.push(self.pop_comment(token, true));
                     arg_docs.push(Doc::Text(token.lexeme.to_string()));
+                    arg_docs.push(self.pop_trailing_comments(token));
                     arg_docs.push(Doc::Text(" = ".to_string()));
                 }
                 None => {}
@@ -467,6 +505,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&function_call.right_paren, true));
         docs.push(Doc::Line);
         docs.push(Doc::Text(")".to_string()));
+        docs.push(self.pop_trailing_comments(&function_call.right_paren));
 
         Doc::Group(docs)
     }
@@ -488,17 +527,21 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("[".to_string()));
+        docs.push(self.pop_trailing_comments(&array_expression.left_bracket));
         docs.push(Doc::Line);
 
-        let mut it = array_expression.elements.iter().peekable();
-
         let mut args_docs = vec![];
-        while let Some(arg) = it.next() {
-            args_docs.push(self.visit_expression(arg));
+        for (i, (element, comma_token)) in array_expression.elements.iter().enumerate() {
+            args_docs.push(self.visit_expression(element));
 
-            if it.peek().is_some() {
+            if let Some(comma) = comma_token {
                 args_docs.push(Doc::Text(",".to_string()));
-                args_docs.push(Doc::BreakableSpace);
+                args_docs.push(self.pop_trailing_comments(comma));
+
+                // Add space if not the last element
+                if i < array_expression.elements.len() - 1 {
+                    args_docs.push(Doc::BreakableSpace);
+                }
             }
         }
         docs.push(Doc::Indent(Box::new(Doc::Group(args_docs))));
@@ -506,6 +549,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&array_expression.right_bracket, true));
         docs.push(Doc::Line);
         docs.push(Doc::Text("]".to_string()));
+        docs.push(self.pop_trailing_comments(&array_expression.right_bracket));
 
         Doc::Group(docs)
     }
@@ -608,11 +652,13 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.visit_expression(&binary_expression.left));
             docs.push(self.pop_comment(&binary_expression.op, true));
             docs.push(Doc::Text(binary_expression.op.lexeme.to_string()));
+            docs.push(self.pop_trailing_comments(&binary_expression.op));
         } else {
             docs.push(self.visit_expression(&binary_expression.left));
             docs.push(Doc::Text(" ".to_string()));
             docs.push(self.pop_comment(&binary_expression.op, true));
             docs.push(Doc::Text(binary_expression.op.lexeme.to_string()));
+            docs.push(self.pop_trailing_comments(&binary_expression.op));
             docs.push(Doc::Text(" ".to_string()));
             docs.push(self.visit_expression(&binary_expression.right));
         }
@@ -626,6 +672,7 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text(unary_expression.op.lexeme.to_string()));
+        docs.push(self.pop_trailing_comments(&unary_expression.op));
         docs.push(self.visit_expression(&unary_expression.expr));
         Doc::Group(docs)
     }
@@ -687,6 +734,21 @@ impl Visitor<Doc> for Formatter {
         Doc::Group(docs)
     }
 
+    fn visit_expression_statement(
+        &mut self,
+        expression_statement: &crate::ast::ExpressionStatement,
+    ) -> Doc {
+        let mut docs = vec![];
+        docs.push(self.visit_expression(&expression_statement.expression));
+
+        // Handle trailing comments on semicolon
+        if let Some(semicolon) = &expression_statement.semicolon_token {
+            docs.push(self.pop_trailing_comments(semicolon));
+        }
+
+        Doc::Group(docs)
+    }
+
     fn visit_variable_declaration(
         &mut self,
         variable_declaration: &crate::ast::VariableDeclaration,
@@ -699,9 +761,17 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Text("var ".to_string()));
         docs.push(self.pop_comment(&variable_declaration.name, true));
         docs.push(Doc::Text(variable_declaration.name.lexeme.to_string()));
+        docs.push(self.pop_trailing_comments(&variable_declaration.name));
         docs.push(self.pop_comment(&variable_declaration.equals_token, true));
         docs.push(Doc::Text(" = ".to_string()));
+        docs.push(self.pop_trailing_comments(&variable_declaration.equals_token));
         docs.push(self.visit_expression(&variable_declaration.value));
+
+        // Handle trailing comments on semicolon
+        if let Some(semicolon) = &variable_declaration.semicolon_token {
+            docs.push(self.pop_trailing_comments(semicolon));
+        }
+
         Doc::Group(docs)
     }
     fn visit_variable_assignment(
@@ -712,7 +782,14 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.visit_expression(&variable_assignment.name));
         docs.push(self.pop_comment(&variable_assignment.equals_token, true));
         docs.push(Doc::Text(" = ".to_string()));
+        docs.push(self.pop_trailing_comments(&variable_assignment.equals_token));
         docs.push(self.visit_expression(&variable_assignment.value));
+
+        // Handle trailing comments on semicolon
+        if let Some(semicolon) = &variable_assignment.semicolon_token {
+            docs.push(self.pop_trailing_comments(semicolon));
+        }
+
         Doc::Group(docs)
     }
     fn visit_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) -> Doc {
@@ -722,10 +799,17 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("return ".to_string()));
+        docs.push(self.pop_trailing_comments(&return_statement.return_token));
         match &return_statement.value {
             Some(value) => docs.push(self.visit_expression(value)),
             None => {}
         }
+
+        // Handle trailing comments on semicolon
+        if let Some(semicolon) = &return_statement.semicolon_token {
+            docs.push(self.pop_trailing_comments(semicolon));
+        }
+
         Doc::Group(docs)
     }
     fn visit_function_definition(
@@ -942,10 +1026,14 @@ impl Visitor<Doc> for Formatter {
                     false, // lucee functions don't use compact formatting
                 ));
             }
-            None => {}
+            None => {
+                docs.push(Doc::Text(";".to_string()));
+            }
         }
 
-        docs.push(Doc::Text(";".to_string()));
+        if let Some(semicolon) = &lucee_function.semicolon_token {
+            docs.push(self.pop_trailing_comments(semicolon));
+        }
         Doc::Group(docs)
     }
     // TODO: Inline short single statement if statements

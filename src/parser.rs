@@ -1,11 +1,11 @@
 use crate::ast::Expression::Literal as ExpLiteral;
 use crate::ast::{
     AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement,
-    ComponentDefinition, Expression, ForControl, ForStatement, FunctionCall, FunctionDefinition,
-    GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal, LiteralValue,
-    LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement, Statement,
-    StructExpression, SwitchStatement, TernaryExpression, TryCatchStatement, UnaryExpression,
-    UnaryOperator, VariableAssignment, VariableDeclaration, WhileStatement, AST,
+    ComponentDefinition, Expression, ExpressionStatement, ForControl, ForStatement, FunctionCall,
+    FunctionDefinition, GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal,
+    LiteralValue, LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement,
+    Statement, StructExpression, SwitchStatement, TernaryExpression, TryCatchStatement,
+    UnaryExpression, UnaryOperator, VariableAssignment, VariableDeclaration, WhileStatement, AST,
 };
 use crate::lexer::{Lexer, SourceSpan, Token, TokenType};
 use std::rc::Rc;
@@ -45,6 +45,7 @@ impl<'ast> Parser<'ast> {
                 lexeme: "",
                 span: SourceSpan { start: 0, end: 0 },
                 comments: None,
+                trailing_comments: None,
                 lines_before: 0,
             },
             lex_time: 0,
@@ -66,6 +67,12 @@ impl<'ast> Parser<'ast> {
             self.ahead = self.lexer.scan_token();
             self.lex_time += start.elapsed().as_micros();
             // println!("Advance took: {0}ns for {1:?}", start.elapsed().as_nanos(), self.ahead);
+        }
+
+        // Assign trailing comments from ahead to behind
+        if self.ahead.trailing_comments.is_some() {
+            self.current.trailing_comments = self.ahead.trailing_comments.clone();
+            self.ahead.trailing_comments = None;
         }
 
         &self.behind
@@ -134,10 +141,15 @@ impl<'ast> Parser<'ast> {
                 .consume(TokenType::Return, "Expected return statement")
                 .clone();
             let expression = self.expression();
-            self.advance_check(TokenType::Semicolon);
+            let semicolon_token = if self.check(TokenType::Semicolon) {
+                Some(self.advance().clone())
+            } else {
+                None
+            };
             return Statement::ReturnStatement(Rc::new(ReturnStatement {
                 return_token,
                 value: Some(expression),
+                semicolon_token,
             }));
         }
 
@@ -195,30 +207,18 @@ impl<'ast> Parser<'ast> {
         if self.check(TokenType::Equal) {
             let equals_token = self.consume(TokenType::Equal, "Expected '='").clone();
             let value = self.expression();
-            self.advance_check(TokenType::Semicolon);
+            let semicolon_token = if self.check(TokenType::Semicolon) {
+                Some(self.advance().clone())
+            } else {
+                None
+            };
             return Statement::VariableAssignment(Rc::new(VariableAssignment {
                 equals_token,
                 name: expression,
                 value,
+                semicolon_token,
             }));
         }
-
-        // // Shorthand increments, ++ or --
-        // // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
-        // if self.check(TokenType::PlusPlus) || self.check(TokenType::MinusMinus) {
-        //     let op = self.advance().clone();
-        //     self.advance_check(TokenType::Semicolon);
-        //     return Statement::ExpressionStmt(Rc::new(Expression::BinaryExpression(Rc::new(
-        //         BinaryExpression {
-        //             left: expression,
-        //             op: op.clone(),
-        //             right: Expression::Literal(Rc::new(Literal {
-        //                 value: LiteralValue::Number(1.0),
-        //                 token: op.clone(),
-        //             })),
-        //         },
-        //     ))));
-        // }
 
         match expression {
             Expression::None => {
@@ -227,7 +227,16 @@ impl<'ast> Parser<'ast> {
             _ => {}
         }
 
-        Statement::ExpressionStmt(Rc::new(expression))
+        let semicolon_token = if self.check(TokenType::Semicolon) {
+            Some(self.advance().clone())
+        } else {
+            None
+        };
+
+        Statement::ExpressionStmt(Rc::new(ExpressionStatement {
+            expression,
+            semicolon_token,
+        }))
     }
 
     fn variable_declaration(&mut self) -> Statement<'ast> {
@@ -241,12 +250,17 @@ impl<'ast> Parser<'ast> {
             .consume(TokenType::Equal, "Expected assignment operator '='")
             .clone();
         let value = self.expression();
-        self.advance_check(TokenType::Semicolon);
+        let semicolon_token = if self.check(TokenType::Semicolon) {
+            Some(self.advance().clone())
+        } else {
+            None
+        };
         return Statement::VariableDeclaration(Rc::new(VariableDeclaration {
             var_token,
             name,
             value,
             equals_token,
+            semicolon_token,
         }));
     }
 
@@ -424,7 +438,11 @@ impl<'ast> Parser<'ast> {
             right_brace = statement_block.2;
         }
 
-        self.advance_check(TokenType::Semicolon);
+        let semicolon_token = if self.check(TokenType::Semicolon) {
+            Some(self.advance().clone())
+        } else {
+            None
+        };
 
         Statement::LuceeFunction(Rc::new(LuceeFunction {
             name,
@@ -432,6 +450,7 @@ impl<'ast> Parser<'ast> {
             body,
             left_brace,
             right_brace,
+            semicolon_token,
         }))
     }
 
@@ -685,13 +704,14 @@ impl<'ast> Parser<'ast> {
             // Parse last break / return statement, optional as can be empty case
             if self.check(TokenType::Break) {
                 let break_statement = self.advance().clone();
-                self.consume(TokenType::Semicolon, "Expected ';'");
+                let semicolon_token = self.consume(TokenType::Semicolon, "Expected ';'").clone();
                 body.push(Statement::LuceeFunction(Rc::new(LuceeFunction {
                     name: break_statement,
                     attributes: Vec::new(),
                     body: None,
                     left_brace: None,
                     right_brace: None,
+                    semicolon_token: Some(semicolon_token),
                 })));
             } else if self.check(TokenType::Return) {
                 // Push return statement
@@ -777,10 +797,8 @@ impl<'ast> Parser<'ast> {
 
         // Shorthand increments, ++ or --
         // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
-        // TODO: Seperate into postExpression term?
         if self.check(TokenType::PlusPlus) || self.check(TokenType::MinusMinus) {
             let op = self.advance().clone();
-            self.advance_check(TokenType::Semicolon);
             return Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
                 op: op.clone(),
@@ -1033,11 +1051,23 @@ impl<'ast> Parser<'ast> {
             let left_bracket = self.advance().clone();
             let mut elements = Vec::new();
             while !self.check(TokenType::RightBracket) {
-                elements.push(self.expression());
+                let element_expr = self.expression();
+                let comma_token = if self.check(TokenType::Comma) {
+                    Some(self.advance().clone())
+                } else {
+                    None
+                };
+                let has_comma = comma_token.is_some();
+                elements.push((element_expr, comma_token));
+
                 if self.check(TokenType::RightBracket) {
                     break;
                 }
-                self.consume(TokenType::Comma, "Expected ','");
+
+                // If we didn't consume a comma above, we expect one now
+                if !has_comma {
+                    self.consume(TokenType::Comma, "Expected ','");
+                }
             }
             let right_bracket = self
                 .consume(TokenType::RightBracket, "Expected ']'")
@@ -1171,8 +1201,6 @@ impl<'ast> Parser<'ast> {
 
             let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
 
-            self.advance_check(TokenType::Semicolon);
-
             return Expression::FunctionCall(Rc::new(FunctionCall {
                 name: function,
                 args: arguments,
@@ -1182,8 +1210,6 @@ impl<'ast> Parser<'ast> {
         }
 
         let right_paren = self.consume(TokenType::RightParen, "Expected ')'").clone();
-
-        self.advance_check(TokenType::Semicolon);
 
         return Expression::FunctionCall(Rc::new(FunctionCall {
             name: function,
