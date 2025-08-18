@@ -495,15 +495,18 @@ impl Visitor<Doc> for Formatter {
 
             full_arg_docs.push(Doc::Group(arg_docs));
 
+            if let Some(comma) = &arg.2 {
+                full_arg_docs.push(self.pop_comment(comma, true));
+            }
             if it.peek().is_some() {
-                if let Some(comma) = &arg.2 {
-                    full_arg_docs.push(self.pop_comment(comma, true));
-                }
                 full_arg_docs.push(Doc::Text(",".to_string()));
-                if let Some(comma) = &arg.2 {
-                    full_arg_docs.push(self.pop_trailing_comments(comma));
-                }
+            }
 
+            if let Some(comma) = &arg.2 {
+                full_arg_docs.push(self.pop_trailing_comments(comma));
+            }
+
+            if it.peek().is_some() {
                 full_arg_docs.push(Doc::BreakableSpace);
             }
         }
@@ -544,14 +547,18 @@ impl Visitor<Doc> for Formatter {
         while let Some((arg, comma_token)) = it.next() {
             args_docs.push(self.visit_expression(arg));
 
+            if let Some(comma) = comma_token {
+                args_docs.push(self.pop_comment(comma, true));
+            }
             if it.peek().is_some() {
-                if let Some(comma) = comma_token {
-                    args_docs.push(self.pop_comment(comma, true));
-                }
                 args_docs.push(Doc::Text(",".to_string()));
-                if let Some(comma) = comma_token {
-                    args_docs.push(self.pop_trailing_comments(comma));
-                }
+            }
+
+            if let Some(comma) = comma_token {
+                args_docs.push(self.pop_trailing_comments(comma));
+            }
+
+            if it.peek().is_some() {
                 args_docs.push(Doc::BreakableSpace);
             }
         }
@@ -571,19 +578,30 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("{".to_string()));
+        docs.push(self.pop_trailing_comments(&struct_expression.left_brace));
         docs.push(Doc::BreakableSpace);
 
         let mut it = struct_expression.elements.iter().peekable();
 
         let mut body_docs = vec![];
-        while let Some((key, value)) = it.next() {
+        while let Some((key, value, comma_token)) = it.next() {
             body_docs.push(self.pop_comment(&key, true));
             body_docs.push(Doc::Text(key.lexeme.to_string()));
             body_docs.push(Doc::Text(": ".to_string()));
             body_docs.push(self.visit_expression(value));
 
+            if let Some(comma) = comma_token {
+                body_docs.push(self.pop_comment(comma, true));
+            }
             if it.peek().is_some() {
                 body_docs.push(Doc::Text(",".to_string()));
+            }
+
+            if let Some(comma) = comma_token {
+                body_docs.push(self.pop_trailing_comments(comma));
+            }
+
+            if it.peek().is_some() {
                 body_docs.push(Doc::BreakableSpace);
             }
         }
@@ -600,6 +618,7 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(Doc::BreakableSpace);
         docs.push(Doc::Text("}".to_string()));
+        self.pop_trailing_comments(&struct_expression.right_brace);
 
         Doc::Group(docs)
     }

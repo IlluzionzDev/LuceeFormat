@@ -181,7 +181,7 @@ impl<'ast, T> Walkable<T> for ArrayExpression<'ast> {
 pub struct StructExpression<'ast> {
     pub left_brace: Token<'ast>,
     pub right_brace: Token<'ast>,
-    pub elements: Vec<(Token<'ast>, Expression<'ast>)>,
+    pub elements: Vec<(Token<'ast>, Expression<'ast>, Option<Token<'ast>>)>,
 }
 
 impl<'ast, T> Walkable<T> for StructExpression<'ast> {

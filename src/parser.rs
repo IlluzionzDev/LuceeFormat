@@ -1095,11 +1095,22 @@ impl<'ast> Parser<'ast> {
                     self.error("Struct keys can be assigned with ':' or '='");
                 }
                 let value = self.expression();
-                elements.push((key.unwrap(), value));
+                let comma_token = if self.check(TokenType::Comma) {
+                    Some(self.advance().clone())
+                } else {
+                    None
+                };
+                let has_comma = comma_token.is_some();
+                elements.push((key.unwrap(), value, comma_token));
+                
                 if self.check(TokenType::RightBrace) {
                     break;
                 }
-                self.consume(TokenType::Comma, "Expected ','");
+                
+                // If we didn't consume a comma above, we expect one now
+                if !has_comma {
+                    self.consume(TokenType::Comma, "Expected ','");
+                }
             }
             let right_brace = self.advance().clone();
             return Expression::StructExpression(Rc::new(StructExpression {
