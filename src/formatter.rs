@@ -634,20 +634,34 @@ impl Visitor<Doc> for Formatter {
 
         let mut full_args_docs = vec![];
         full_args_docs.push(Doc::Text("(".to_string()));
+        if let Some(left_paren) = &lambda_expression.left_paren {
+            full_args_docs.push(self.pop_trailing_comments(left_paren))
+        }
         full_args_docs.push(Doc::Line);
 
         let mut it = lambda_expression.parameters.iter().peekable();
 
         let mut arg_docs = vec![];
-        while let Some(arg) = it.next() {
+        while let Some((arg, comma_token)) = it.next() {
             arg_docs.push(self.pop_comment(&arg, !self.beginning_statement));
             arg_docs.push(self.pop_whitespace(&arg));
             self.beginning_statement = false;
 
             arg_docs.push(Doc::Text(arg.lexeme.to_string()));
 
+            if let Some(comma) = comma_token {
+                arg_docs.push(self.pop_comment(comma, true));
+            }
+
             if it.peek().is_some() {
                 arg_docs.push(Doc::Text(",".to_string()));
+            }
+
+            if let Some(comma) = comma_token {
+                arg_docs.push(self.pop_trailing_comments(comma));
+            }
+
+            if it.peek().is_some() {
                 arg_docs.push(Doc::BreakableSpace);
             }
         }
@@ -659,10 +673,14 @@ impl Visitor<Doc> for Formatter {
         }
         full_args_docs.push(Doc::Line);
         full_args_docs.push(Doc::Text(") ".to_string()));
+        if let Some(right_paren) = &lambda_expression.right_paren {
+            full_args_docs.push(self.pop_trailing_comments(right_paren))
+        }
         docs.push(Doc::Group(full_args_docs));
 
         docs.push(self.pop_comment(&lambda_expression.lambda_token, true));
         docs.push(Doc::Text("=> ".to_string()));
+        docs.push(self.pop_trailing_comments(&lambda_expression.lambda_token));
 
         docs.push(self.format_statement_body(
             &lambda_expression.body,

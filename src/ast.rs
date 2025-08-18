@@ -194,7 +194,8 @@ impl<'ast, T> Walkable<T> for StructExpression<'ast> {
 pub struct LambdaExpression<'ast> {
     pub left_paren: Option<Token<'ast>>,
     pub right_paren: Option<Token<'ast>>,
-    pub parameters: Vec<Token<'ast>>,
+    // 1: Arg identifier, 2: Optional comma
+    pub parameters: Vec<(Token<'ast>, Option<Token<'ast>>)>,
     pub lambda_token: Token<'ast>,
     pub left_brace: Option<Token<'ast>>,
     pub right_brace: Option<Token<'ast>>,
