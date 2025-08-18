@@ -1024,6 +1024,7 @@ impl Visitor<Doc> for Formatter {
 
         let mut name_group = vec![];
         name_group.push(Doc::Text("component".to_string()));
+        name_group.push(self.pop_trailing_comments(&component_definition.component_token));
         name_group.push(Doc::BreakableSpace);
 
         let mut arg_docs = vec![];
@@ -1033,6 +1034,7 @@ impl Visitor<Doc> for Formatter {
             .for_each(|attribute| {
                 arg_docs.push(self.pop_comment(&attribute.0, true));
                 arg_docs.push(Doc::Text(attribute.0.lexeme.to_string()));
+                arg_docs.push(self.pop_trailing_comments(&attribute.0));
                 arg_docs.push(Doc::Text("=".to_string()));
                 arg_docs.push(self.visit_expression(&attribute.1));
                 arg_docs.push(Doc::BreakableSpace);
@@ -1046,6 +1048,7 @@ impl Visitor<Doc> for Formatter {
         name_group.push(self.pop_comment(&component_definition.left_brace, true));
         docs.push(Doc::Group(name_group));
         docs.push(Doc::Text("{".to_string()));
+        docs.push(self.pop_trailing_comments(&component_definition.left_brace));
 
         docs.push(Doc::HardLine);
         docs.push(Doc::HardLine);
@@ -1070,6 +1073,7 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(Doc::HardLine);
         docs.push(Doc::Text("}".to_string()));
+        docs.push(self.pop_trailing_comments(&component_definition.right_brace));
         Doc::Group(docs)
     }
     fn visit_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) -> Doc {
@@ -1080,12 +1084,14 @@ impl Visitor<Doc> for Formatter {
 
         let mut name_group = vec![];
         name_group.push(Doc::Text(lucee_function.name.lexeme.to_string()));
+        name_group.push(self.pop_trailing_comments(&lucee_function.name));
         name_group.push(Doc::Line);
 
         let mut param_docs = vec![];
         lucee_function.attributes.iter().for_each(|attribute| {
             param_docs.push(self.pop_comment(&attribute.0, true));
             param_docs.push(Doc::Text(attribute.0.lexeme.to_string()));
+            param_docs.push(self.pop_trailing_comments(&attribute.0));
             param_docs.push(Doc::Text("=".to_string()));
             param_docs.push(self.visit_expression(&attribute.1));
             param_docs.push(Doc::BreakableSpace);
@@ -1107,6 +1113,9 @@ impl Visitor<Doc> for Formatter {
                 ));
             }
             None => {
+                if let Some(semicolon) = &lucee_function.semicolon_token {
+                    docs.push(self.pop_comment(semicolon, true));
+                }
                 docs.push(Doc::Text(";".to_string()));
             }
         }
@@ -1116,7 +1125,6 @@ impl Visitor<Doc> for Formatter {
         }
         Doc::Group(docs)
     }
-    // TODO: Inline short single statement if statements
     fn visit_if_statement(&mut self, if_statement: &crate::ast::IfStatement) -> Doc {
         let mut docs = vec![];
         docs.push(self.pop_comment(&if_statement.if_token, !self.beginning_statement));
@@ -1125,8 +1133,10 @@ impl Visitor<Doc> for Formatter {
 
         let mut test_group = vec![];
         test_group.push(Doc::Text("if ".to_string()));
+        test_group.push(self.pop_trailing_comments(&if_statement.if_token));
         test_group.push(self.pop_comment(&if_statement.left_paren, true));
         test_group.push(Doc::Text("(".to_string()));
+        test_group.push(self.pop_trailing_comments(&if_statement.left_paren));
         test_group.push(Doc::Line);
         test_group.push(Doc::Indent(Box::new(Doc::Group(vec![
             self.visit_expression(&if_statement.condition),
@@ -1134,9 +1144,7 @@ impl Visitor<Doc> for Formatter {
         ]))));
         test_group.push(Doc::Line);
         test_group.push(Doc::Text(") ".to_string()));
-        if if_statement.left_brace.is_some() {
-            test_group.push(self.pop_comment(&if_statement.left_brace.clone().unwrap(), true));
-        }
+        test_group.push(self.pop_trailing_comments(&if_statement.right_paren));
         docs.push(Doc::Group(test_group));
 
         docs.push(self.format_statement_body(
@@ -1155,6 +1163,9 @@ impl Visitor<Doc> for Formatter {
                             self.pop_comment(&if_statement.else_token.clone().unwrap(), true),
                         );
                         docs.push(Doc::Text(" else ".to_string()));
+                        docs.push(
+                            self.pop_trailing_comments(&if_statement.else_token.clone().unwrap()),
+                        );
                         docs.push(self.visit_if_statement(if_state));
                     }
                     _ => {
@@ -1162,14 +1173,9 @@ impl Visitor<Doc> for Formatter {
                             self.pop_comment(&if_statement.else_token.clone().unwrap(), true),
                         );
                         docs.push(Doc::Text(" else ".to_string()));
-                        if if_statement.else_left_brace.is_some() {
-                            docs.push(
-                                self.pop_comment(
-                                    &if_statement.else_left_brace.clone().unwrap(),
-                                    true,
-                                ),
-                            );
-                        }
+                        docs.push(
+                            self.pop_trailing_comments(&if_statement.else_token.clone().unwrap()),
+                        );
                         docs.push(self.format_statement_body(
                             else_body,
                             if_statement.else_left_brace.as_ref(),
@@ -1192,8 +1198,10 @@ impl Visitor<Doc> for Formatter {
 
         let mut arg_docs = vec![];
         arg_docs.push(Doc::Text("for ".to_string()));
+        arg_docs.push(self.pop_trailing_comments(&for_statement.for_token));
         arg_docs.push(self.pop_comment(&for_statement.left_paren, true));
         arg_docs.push(Doc::Text("(".to_string()));
+        arg_docs.push(self.pop_trailing_comments(&for_statement.left_paren));
         arg_docs.push(Doc::Line);
 
         // Print control
@@ -1247,6 +1255,7 @@ impl Visitor<Doc> for Formatter {
         arg_docs.push(self.pop_comment(&for_statement.right_paren, true));
         arg_docs.push(Doc::Line);
         arg_docs.push(Doc::Text(") ".to_string()));
+        arg_docs.push(self.pop_trailing_comments(&for_statement.right_paren));
         docs.push(Doc::Group(arg_docs));
 
         docs.push(self.format_statement_body(
@@ -1271,20 +1280,29 @@ impl Visitor<Doc> for Formatter {
                 self.beginning_statement = false;
             }
             docs.push(Doc::Text("do ".to_string()));
+
+            if let Some(do_token) = &while_statement.do_token {
+                docs.push(self.pop_trailing_comments(do_token))
+            }
         } else {
             docs.push(self.pop_comment(&while_statement.while_token, !self.beginning_statement));
             docs.push(self.pop_whitespace(&while_statement.while_token));
             self.beginning_statement = false;
 
             let mut while_docs = vec![];
-            while_docs.push(Doc::Text("while (".to_string()));
+            while_docs.push(Doc::Text("while ".to_string()));
+            while_docs.push(self.pop_trailing_comments(&while_statement.while_token));
+            while_docs.push(self.pop_comment(&while_statement.left_paren, true));
+            while_docs.push(Doc::Text("(".to_string()));
+            while_docs.push(self.pop_trailing_comments(&while_statement.left_paren));
             while_docs.push(Doc::Line);
             while_docs.push(Doc::Indent(Box::new(
                 self.visit_expression(&while_statement.condition),
             )));
-            while_docs.push(self.pop_comment(&while_statement.left_paren, true));
+            while_docs.push(self.pop_comment(&while_statement.right_paren, true));
             while_docs.push(Doc::Line);
             while_docs.push(Doc::Text(") ".to_string()));
+            while_docs.push(self.pop_trailing_comments(&while_statement.right_paren));
             docs.push(Doc::Group(while_docs));
         }
 
@@ -1300,14 +1318,19 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_comment(&while_statement.while_token, true));
 
             let mut while_docs = vec![];
-            while_docs.push(Doc::Text(" while (".to_string()));
+            while_docs.push(Doc::Text("while ".to_string()));
+            while_docs.push(self.pop_trailing_comments(&while_statement.while_token));
+            while_docs.push(self.pop_comment(&while_statement.left_paren, true));
+            while_docs.push(Doc::Text("(".to_string()));
+            while_docs.push(self.pop_trailing_comments(&while_statement.left_paren));
             while_docs.push(Doc::Line);
             while_docs.push(Doc::Indent(Box::new(
                 self.visit_expression(&while_statement.condition),
             )));
-            while_docs.push(self.pop_comment(&while_statement.left_paren, true));
+            while_docs.push(self.pop_comment(&while_statement.right_paren, true));
             while_docs.push(Doc::Line);
-            while_docs.push(Doc::Text(")".to_string()));
+            while_docs.push(Doc::Text(") ".to_string()));
+            while_docs.push(self.pop_trailing_comments(&while_statement.right_paren));
             docs.push(Doc::Group(while_docs));
         }
         Doc::Group(docs)
@@ -1321,8 +1344,10 @@ impl Visitor<Doc> for Formatter {
 
         let mut switch_docs = vec![];
         switch_docs.push(Doc::Text("switch ".to_string()));
+        switch_docs.push(self.pop_trailing_comments(&switch_statement.switch_token));
         switch_docs.push(self.pop_comment(&switch_statement.left_paren, true));
         switch_docs.push(Doc::Text("(".to_string()));
+        switch_docs.push(self.pop_trailing_comments(&switch_statement.left_paren));
         switch_docs.push(Doc::Line);
         switch_docs.push(Doc::Indent(Box::new(
             self.visit_expression(&switch_statement.expression),
@@ -1330,12 +1355,14 @@ impl Visitor<Doc> for Formatter {
         switch_docs.push(Doc::Line);
         switch_docs.push(self.pop_comment(&switch_statement.right_paren, true));
         switch_docs.push(Doc::Text(") ".to_string()));
+        switch_docs.push(self.pop_trailing_comments(&switch_statement.right_paren));
         switch_docs.push(self.pop_comment(&switch_statement.left_brace, true));
 
         docs.push(Doc::Group(switch_docs));
 
         let mut full_body_docs = vec![];
         full_body_docs.push(Doc::Text("{".to_string()));
+        full_body_docs.push(self.pop_trailing_comments(&switch_statement.left_brace));
         // full_body_docs.push(Doc::HardLine);
 
         self.collapse_whitespace = true;
@@ -1348,14 +1375,21 @@ impl Visitor<Doc> for Formatter {
                     body_docs.push(self.pop_comment(&condition.0, false));
                 }
                 body_docs.push(Doc::Text("default:".to_string()));
+
+                if let Some(condition) = default_condition {
+                    body_docs.push(self.pop_trailing_comments(&condition.2));
+                }
+
                 body_docs.push(Doc::HardLine);
             } else {
                 case.condition.iter().for_each(|condition| {
                     body_docs.push(self.pop_comment(&condition.0, false));
                     body_docs.push(Doc::Text("case ".to_string()));
+                    body_docs.push(self.pop_trailing_comments(&condition.0));
                     body_docs.push(self.visit_expression(&condition.1));
                     body_docs.push(self.pop_comment(&condition.2, true));
                     body_docs.push(Doc::Text(":".to_string()));
+                    body_docs.push(self.pop_trailing_comments(&condition.2));
                     body_docs.push(Doc::HardLine);
                 });
             }
@@ -1385,6 +1419,7 @@ impl Visitor<Doc> for Formatter {
 
         full_body_docs.push(Doc::HardLine);
         full_body_docs.push(Doc::Text("}".to_string()));
+        full_body_docs.push(self.pop_trailing_comments(&switch_statement.right_brace));
         docs.push(Doc::Group(full_body_docs));
         Doc::Group(docs)
     }
@@ -1398,6 +1433,7 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("try ".to_string()));
+        docs.push(self.pop_trailing_comments(&try_catch_statement.try_token));
 
         docs.push(self.format_statement_body(
             &try_catch_statement.try_body,
@@ -1409,8 +1445,10 @@ impl Visitor<Doc> for Formatter {
         let mut catch_docs = vec![];
         catch_docs.push(self.pop_comment(&try_catch_statement.catch_token, true));
         catch_docs.push(Doc::Text(" catch ".to_string()));
+        catch_docs.push(self.pop_trailing_comments(&try_catch_statement.catch_token));
         catch_docs.push(self.pop_comment(&try_catch_statement.left_paren, true));
         catch_docs.push(Doc::Text("(".to_string()));
+        catch_docs.push(self.pop_trailing_comments(&try_catch_statement.left_paren));
         catch_docs.push(Doc::Line);
 
         let mut catch_expression_docs = vec![];
@@ -1430,12 +1468,14 @@ impl Visitor<Doc> for Formatter {
         }
         catch_expression_docs.push(self.pop_comment(&try_catch_statement.catch_var, true));
         catch_expression_docs.push(Doc::Text(try_catch_statement.catch_var.lexeme.to_string()));
+        catch_expression_docs.push(self.pop_trailing_comments(&try_catch_statement.catch_var));
 
         catch_docs.push(Doc::Indent(Box::new(Doc::Group(catch_expression_docs))));
 
         catch_docs.push(self.pop_comment(&try_catch_statement.right_paren, true));
         catch_docs.push(Doc::Line);
         catch_docs.push(Doc::Text(") ".to_string()));
+        catch_docs.push(self.pop_trailing_comments(&try_catch_statement.right_paren));
 
         docs.push(Doc::Group(catch_docs));
 
