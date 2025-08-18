@@ -404,7 +404,7 @@ pub struct FunctionDefinition<'ast> {
     pub function_token: Token<'ast>,
     pub name: Token<'ast>,
     pub left_paren: Token<'ast>,
-    pub parameters: Vec<Parameter<'ast>>,
+    pub parameters: Vec<(Parameter<'ast>, Option<Token<'ast>>)>,
     pub right_paren: Token<'ast>,
     pub body: Vec<Statement<'ast>>,
     pub left_brace: Token<'ast>,

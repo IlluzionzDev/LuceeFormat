@@ -362,13 +362,31 @@ impl<'ast> Parser<'ast> {
     }
 
     // Consume parameter list of <required>? <type> <identifier> ("=" <expression>)?
-    fn parameters(&mut self) -> Vec<Parameter<'ast>> {
+    fn parameters(&mut self) -> Vec<(Parameter<'ast>, Option<Token<'ast>>)> {
         let mut parameters = Vec::new();
 
-        parameters.push(self.parameter());
+        let first_param = self.parameter();
+        let comma_token = if self.check(TokenType::Comma) {
+            Some(self.advance().clone())
+        } else {
+            None
+        };
+        let has_comma = comma_token.is_some();
+        parameters.push((first_param, comma_token));
 
-        while self.advance_check(TokenType::Comma) {
-            parameters.push(self.parameter());
+        while has_comma && !self.check(TokenType::RightParen) {
+            let param = self.parameter();
+            let comma_token = if self.check(TokenType::Comma) {
+                Some(self.advance().clone())
+            } else {
+                None
+            };
+            let has_more_comma = comma_token.is_some();
+            parameters.push((param, comma_token));
+            
+            if !has_more_comma {
+                break;
+            }
         }
 
         parameters

@@ -735,10 +735,12 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(Doc::Indent(Box::new(Doc::Group(vec![
             Doc::Text("? ".to_string()),
+            self.pop_trailing_comments(&ternary_expression.question_token),
             self.visit_expression(&ternary_expression.true_expr),
             self.pop_comment(&ternary_expression.colon_token, true),
             Doc::BreakableSpace,
             Doc::Text(": ".to_string()),
+            self.pop_trailing_comments(&ternary_expression.colon_token),
             self.visit_expression(&ternary_expression.false_expr),
         ]))));
 
@@ -751,11 +753,13 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("(".to_string()));
+        docs.push(self.pop_trailing_comments(&group_expression.left_paren));
         docs.push(Doc::Line);
         docs.push(self.visit_expression(&group_expression.expr));
         docs.push(self.pop_comment(&group_expression.right_paren, true));
         docs.push(Doc::Line);
         docs.push(Doc::Text(")".to_string()));
+        docs.push(self.pop_trailing_comments(&group_expression.right_paren));
         Doc::Group(docs)
     }
     // TODO: Figure out how to properly wrap
@@ -764,6 +768,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.visit_expression(&member_expression.object));
         docs.push(self.pop_comment(&member_expression.dot_token, true));
         docs.push(Doc::Text(".".to_string()));
+        docs.push(self.pop_trailing_comments(&member_expression.dot_token));
         docs.push(Doc::Line);
         docs.push(self.visit_expression(&member_expression.property));
         Doc::Group(docs)
@@ -774,11 +779,13 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.visit_expression(&index_access.object));
         docs.push(self.pop_comment(&index_access.left_bracket, true));
         docs.push(Doc::Text("[".to_string()));
+        docs.push(self.pop_trailing_comments(&index_access.left_bracket));
         docs.push(Doc::Line);
         docs.push(self.visit_expression(&index_access.index));
         docs.push(self.pop_comment(&index_access.right_bracket, true));
         docs.push(Doc::Line);
         docs.push(Doc::Text("]".to_string()));
+        docs.push(self.pop_trailing_comments(&index_access.right_bracket));
         Doc::Group(docs)
     }
 
@@ -791,6 +798,7 @@ impl Visitor<Doc> for Formatter {
 
         // Handle trailing comments on semicolon
         if let Some(semicolon) = &expression_statement.semicolon_token {
+            docs.push(self.pop_comment(semicolon, true));
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
@@ -807,6 +815,7 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
 
         docs.push(Doc::Text("var ".to_string()));
+        docs.push(self.pop_trailing_comments(&variable_declaration.var_token));
         docs.push(self.pop_comment(&variable_declaration.name, true));
         docs.push(Doc::Text(variable_declaration.name.lexeme.to_string()));
         docs.push(self.pop_trailing_comments(&variable_declaration.name));
@@ -817,6 +826,7 @@ impl Visitor<Doc> for Formatter {
 
         // Handle trailing comments on semicolon
         if let Some(semicolon) = &variable_declaration.semicolon_token {
+            docs.push(self.pop_comment(semicolon, true));
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
@@ -835,6 +845,7 @@ impl Visitor<Doc> for Formatter {
 
         // Handle trailing comments on semicolon
         if let Some(semicolon) = &variable_assignment.semicolon_token {
+            docs.push(self.pop_comment(semicolon, true));
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
@@ -855,6 +866,7 @@ impl Visitor<Doc> for Formatter {
 
         // Handle trailing comments on semicolon
         if let Some(semicolon) = &return_statement.semicolon_token {
+            docs.push(self.pop_comment(semicolon, true));
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
@@ -921,34 +933,42 @@ impl Visitor<Doc> for Formatter {
 
         arg_docs.push(self.pop_comment(&function_definition.name, true));
         arg_docs.push(Doc::Text(function_definition.name.lexeme.to_string()));
+        arg_docs.push(self.pop_trailing_comments(&function_definition.name));
         arg_docs.push(self.pop_comment(&function_definition.left_paren, true));
         arg_docs.push(Doc::Text("(".to_string()));
+        arg_docs.push(self.pop_trailing_comments(&function_definition.left_paren));
         arg_docs.push(Doc::Line);
 
         let mut it = function_definition.parameters.iter().peekable();
 
         let mut param_docs = vec![];
-        while let Some(param) = it.next() {
+        while let Some((param, comma_token)) = it.next() {
             let mut param_doc = vec![];
             if param.required.is_some() {
-                param_doc.push(self.pop_comment(&param.required.clone().unwrap(), true));
+                let required_token = param.required.as_ref().unwrap();
+                param_doc.push(self.pop_comment(&required_token, true));
                 param_doc.push(Doc::Text("required ".to_string()));
+                param_doc.push(self.pop_trailing_comments(&required_token));
             }
             match &param.param_type {
                 Some(param_type) => {
                     param_doc.push(self.pop_comment(&param_type, true));
                     param_doc.push(Doc::Text(param_type.lexeme.to_string()));
+                    param_doc.push(self.pop_trailing_comments(&param_type));
                     param_doc.push(Doc::Text(" ".to_string()));
                 }
                 None => {}
             }
             param_doc.push(self.pop_comment(&param.name, true));
             param_doc.push(Doc::Text(param.name.lexeme.to_string()));
+            param_doc.push(self.pop_trailing_comments(&param.name));
 
             match &param.default_value {
                 Some(default_value) => {
                     param_doc.push(self.pop_comment(&param.equals_token.clone().unwrap(), true));
                     param_doc.push(Doc::Text(" = ".to_string()));
+                    param_doc
+                        .push(self.pop_trailing_comments(&param.equals_token.clone().unwrap()));
                     param_doc.push(self.visit_expression(default_value));
                 }
                 None => {}
@@ -956,8 +976,19 @@ impl Visitor<Doc> for Formatter {
 
             param_docs.push(Doc::Group(param_doc));
 
+            if let Some(comma) = comma_token {
+                param_docs.push(self.pop_comment(comma, true));
+            }
+
             if it.peek().is_some() {
                 param_docs.push(Doc::Text(",".to_string()));
+            }
+
+            if let Some(comma) = comma_token {
+                param_docs.push(self.pop_trailing_comments(comma));
+            }
+
+            if it.peek().is_some() {
                 param_docs.push(Doc::BreakableSpace);
             }
         }
@@ -966,6 +997,7 @@ impl Visitor<Doc> for Formatter {
         arg_docs.push(self.pop_comment(&function_definition.right_paren, true));
         arg_docs.push(Doc::Line);
         arg_docs.push(Doc::Text(") ".to_string()));
+        arg_docs.push(self.pop_trailing_comments(&function_definition.right_paren));
         docs.push(Doc::Group(arg_docs));
 
         docs.push(self.format_statement_body(
