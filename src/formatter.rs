@@ -28,6 +28,7 @@ impl Doc {
             Doc::Text(text) => text.len(),
             Doc::Indent(doc) => doc.width(),
             Doc::Group(docs) => docs.iter().map(|doc| doc.width()).sum(),
+            Doc::Docs(docs) => docs.iter().map(|doc| doc.width()).sum(),
             Doc::BreakableSpace => 1,
             _ => 0,
         }
