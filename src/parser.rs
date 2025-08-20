@@ -1086,6 +1086,11 @@ impl<'ast> Parser<'ast> {
             }));
         }
 
+        // Function lambda: function(args) => {}
+        if self.check(TokenType::Function) && self.check_next(TokenType::LeftParen) {
+            return self.lambda_expression(None);
+        }
+
         // Array literal
         // println!("Start array expression");
         if self.check(TokenType::LeftBracket) {
@@ -1186,6 +1191,20 @@ impl<'ast> Parser<'ast> {
     }
 
     fn lambda_expression(&mut self, left_paren: Option<Token<'ast>>) -> Expression<'ast> {
+        // Check if we're parsing a function lambda
+        let function_token = if self.check(TokenType::Function) {
+            Some(self.advance().clone())
+        } else {
+            None
+        };
+        
+        // If function lambda, left paren is required and must be consumed
+        let left_paren = if function_token.is_some() {
+            Some(self.consume(TokenType::LeftParen, "Expected '(' after 'function'").clone())
+        } else {
+            left_paren // Use the passed-in value (could be None for simple lambdas)
+        };
+
         // Consume params as comma separated identifiers
         let mut parameters = Vec::new();
 
@@ -1214,10 +1233,32 @@ impl<'ast> Parser<'ast> {
             right_paren = Some(self.advance().clone());
         }
 
-        let lambda_token = self.consume(TokenType::Lambda, "Expected '=>'").clone();
+        // Function lambdas don't use => token, regular lambdas do
+        let lambda_token = if function_token.is_some() {
+            // Function lambdas should NOT have => token
+            if self.check(TokenType::Lambda) {
+                self.error("Function lambdas should not use '=>' token");
+            }
+            // Create a dummy token for consistency (won't be rendered)
+            Token {
+                token_type: crate::lexer::TokenType::Lambda,
+                lexeme: "",
+                line: 0,
+                column: 0,
+                end_column: 0,
+                span: crate::lexer::SourceSpan { start: 0, end: 0 },
+                comments: None,
+                trailing_comments: None,
+                lines_before: 0,
+            }
+        } else {
+            // Regular lambdas require => token
+            self.consume(TokenType::Lambda, "Expected '=>'").clone()
+        };
 
         let (body, left_brace, right_brace) = self.consume_statement_block(true);
         Expression::LambdaExpression(Rc::new(LambdaExpression {
+            function_token,
             left_paren,
             right_paren,
             parameters,

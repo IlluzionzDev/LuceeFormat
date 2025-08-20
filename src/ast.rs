@@ -193,6 +193,7 @@ impl<'ast, T> Walkable<T> for StructExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct LambdaExpression<'ast> {
+    pub function_token: Option<Token<'ast>>,
     pub left_paren: Option<Token<'ast>>,
     pub right_paren: Option<Token<'ast>>,
     // 1: Arg identifier, 2: Optional comma

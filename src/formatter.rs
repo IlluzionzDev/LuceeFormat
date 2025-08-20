@@ -632,6 +632,16 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) -> Doc {
         let mut docs = vec![];
+        
+        // Handle function token if present (function lambdas)
+        if let Some(function_token) = &lambda_expression.function_token {
+            docs.push(self.pop_comment(function_token, !self.beginning_statement));
+            docs.push(self.pop_whitespace(function_token));
+            self.beginning_statement = false;
+            docs.push(Doc::Text("function".to_string()));
+            docs.push(self.pop_trailing_comments(function_token));
+        }
+        
         if lambda_expression.left_paren.is_some() {
             docs.push(self.pop_comment(
                 &lambda_expression.left_paren.clone().unwrap(),
@@ -686,9 +696,12 @@ impl Visitor<Doc> for Formatter {
         }
         docs.push(Doc::Group(full_args_docs));
 
-        docs.push(self.pop_comment(&lambda_expression.lambda_token, true));
-        docs.push(Doc::Text("=> ".to_string()));
-        docs.push(self.pop_trailing_comments(&lambda_expression.lambda_token));
+        // Only render => token for regular lambdas, not function lambdas
+        if lambda_expression.function_token.is_none() {
+            docs.push(self.pop_comment(&lambda_expression.lambda_token, true));
+            docs.push(Doc::Text("=> ".to_string()));
+            docs.push(self.pop_trailing_comments(&lambda_expression.lambda_token));
+        }
 
         docs.push(self.format_statement_body(
             &lambda_expression.body,
