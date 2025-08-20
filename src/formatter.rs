@@ -632,7 +632,7 @@ impl Visitor<Doc> for Formatter {
     }
     fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) -> Doc {
         let mut docs = vec![];
-        
+
         // Handle function token if present (function lambdas)
         if let Some(function_token) = &lambda_expression.function_token {
             docs.push(self.pop_comment(function_token, !self.beginning_statement));
@@ -641,7 +641,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(Doc::Text("function".to_string()));
             docs.push(self.pop_trailing_comments(function_token));
         }
-        
+
         if lambda_expression.left_paren.is_some() {
             docs.push(self.pop_comment(
                 &lambda_expression.left_paren.clone().unwrap(),
@@ -1085,14 +1085,11 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_trailing_comments(&component_definition.left_brace));
 
         docs.push(Doc::HardLine);
-        docs.push(Doc::HardLine);
 
         let mut body_docs = vec![];
-        // TODO: Decide if preserve spacing or force line breaks between statements
         component_definition.body.iter().for_each(|body| {
-            self.collapse_whitespace = true;
-
-            body_docs.push(Doc::Group(vec![self.visit_statement(body), Doc::HardLine]));
+            body_docs.push(self.visit_statement(body));
+            body_docs.push(Doc::HardLine);
         });
 
         if component_definition.right_brace.comments.is_some() {
