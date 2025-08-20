@@ -4,7 +4,7 @@ use crate::ast::{
     ComponentDefinition, Expression, ExpressionStatement, ForControl, ForStatement, FunctionCall,
     FunctionDefinition, GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal,
     LiteralValue, LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement,
-    Statement, StructExpression, SwitchStatement, TernaryExpression, TryCatchStatement,
+    Statement, StaticAccess, StructExpression, SwitchStatement, TernaryExpression, TryCatchStatement,
     UnaryExpression, UnaryOperator, VariableAssignment, VariableDeclaration, WhileStatement, AST,
 };
 use crate::lexer::{Lexer, SourceSpan, Token, TokenType};
@@ -1031,6 +1031,29 @@ impl<'ast> Parser<'ast> {
         // Identifier for function call
         // Edge-case: contains is both a keyword and a in-build function
         if self.check(TokenType::Identifier) || self.check(TokenType::Contains) {
+            // If followed by ::, it's a static access
+            if self.check_next(TokenType::ColonColon) {
+                let class_name = self.advance().clone();
+                let colon_colon_token = self.advance().clone();
+                
+                // Expect function call after ::
+                if self.check(TokenType::Identifier) && self.check_next(TokenType::LeftParen) {
+                    let function_name = self.advance().clone();
+                    let name = Expression::Identifier(Rc::new(function_name));
+                    let function_call = self.function_call(name);
+                    
+                    if let Expression::FunctionCall(fc) = function_call {
+                        return Expression::StaticAccess(Rc::new(StaticAccess {
+                            class_name,
+                            colon_colon_token,
+                            function_call: (*fc).clone(),
+                        }));
+                    }
+                }
+                
+                self.error("Expected function call after '::'");
+            }
+
             // If followed by (, it's a function call
             if self.check_next(TokenType::LeftParen) {
                 let function = self.advance().clone();

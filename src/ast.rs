@@ -127,6 +127,7 @@ pub enum Expression<'ast> {
     GroupExpression(Rc<GroupExpression<'ast>>),
     MemberAccess(Rc<MemberAccess<'ast>>),
     IndexAccess(Rc<IndexAccess<'ast>>),
+    StaticAccess(Rc<StaticAccess<'ast>>),
     None, // Trying to consume expression but there is none. Represented by blank space
 }
 
@@ -285,6 +286,19 @@ pub struct IndexAccess<'ast> {
 impl<'ast, T> Walkable<T> for IndexAccess<'ast> {
     fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
         visitor.visit_index_access(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticAccess<'ast> {
+    pub class_name: Token<'ast>,
+    pub colon_colon_token: Token<'ast>,
+    pub function_call: FunctionCall<'ast>,
+}
+
+impl<'ast, T> Walkable<T> for StaticAccess<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_static_access(self)
     }
 }
 

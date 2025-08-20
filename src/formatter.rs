@@ -292,7 +292,11 @@ impl Formatter {
             }
         }
 
-        Doc::Group(docs)
+        if docs.is_empty() {
+            Doc::Nil
+        } else {
+            Doc::Group(docs)
+        }
     }
 
     /// Formats / pops comment on this token. Handles formatting indents, by stripping out newlines
@@ -345,7 +349,11 @@ impl Formatter {
             }
         }
 
-        Doc::Group(docs)
+        if docs.is_empty() {
+            Doc::Nil
+        } else {
+            Doc::Group(docs)
+        }
     }
 
     fn format_comment(&self, raw: &str) -> String {
@@ -786,6 +794,19 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Line);
         docs.push(Doc::Text("]".to_string()));
         docs.push(self.pop_trailing_comments(&index_access.right_bracket));
+        Doc::Group(docs)
+    }
+    fn visit_static_access(&mut self, static_access: &crate::ast::StaticAccess) -> Doc {
+        let mut docs = vec![];
+        docs.push(self.pop_comment(&static_access.class_name, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&static_access.class_name));
+        self.beginning_statement = false;
+        docs.push(Doc::Text(static_access.class_name.lexeme.to_string()));
+        docs.push(self.pop_trailing_comments(&static_access.class_name));
+        docs.push(self.pop_comment(&static_access.colon_colon_token, true));
+        docs.push(Doc::Text("::".to_string()));
+        docs.push(self.pop_trailing_comments(&static_access.colon_colon_token));
+        docs.push(self.visit_function_call(&static_access.function_call));
         Doc::Group(docs)
     }
 

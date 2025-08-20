@@ -78,6 +78,9 @@ pub trait Visitor<T> {
     fn visit_index_access(&mut self, index_access: &crate::ast::IndexAccess) -> T {
         self.walk_index_access(index_access)
     }
+    fn visit_static_access(&mut self, static_access: &crate::ast::StaticAccess) -> T {
+        self.walk_static_access(static_access)
+    }
 
     fn visit_expression_statement(
         &mut self,
@@ -206,6 +209,7 @@ pub trait Visitor<T> {
                 self.visit_member_expression(member_expression)
             }
             Expression::IndexAccess(index_access) => self.visit_index_access(index_access),
+            Expression::StaticAccess(static_access) => self.visit_static_access(static_access),
             _ => self.combine_docs(&mut vec![]),
         }
     }
@@ -268,6 +272,9 @@ pub trait Visitor<T> {
         docs.push(self.visit_expression(&index_access.object));
         docs.push(self.visit_expression(&index_access.index));
         self.combine_docs(&mut docs)
+    }
+    fn walk_static_access(&mut self, static_access: &crate::ast::StaticAccess) -> T {
+        self.combine_docs(&mut vec![])
     }
 
     fn walk_expression_statement(

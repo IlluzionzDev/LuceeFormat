@@ -24,5 +24,4 @@ complex rules, and just runs through tokens in microseconds.
 - Arena allocator for AST nodes
 - Line breaks with '// comments' as "inline" comments should preserve line breaks
 - ^ Need a way for a Doc node to "force" it's group to break
-- Handle static access '::' operator
 - Handle function lambdas, e.g inline 'function(arg1, arg2) {}'
