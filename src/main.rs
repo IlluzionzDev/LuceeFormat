@@ -14,7 +14,7 @@ fn main() {
     let start_file = std::time::Instant::now();
 
     // Read in test.cfm into a string
-    let source = std::fs::read_to_string("test/pwf.cfc").unwrap();
+    let source = std::fs::read_to_string("test/test.cfc").unwrap();
 
     let end_file = start_file.elapsed().as_micros();
 
@@ -32,9 +32,12 @@ fn main() {
     //     println!("{:?}", statement);
     // }
 
-    let traverse_start = std::time::Instant::now();
+    let doc_build_start = std::time::Instant::now();
     let mut formatter = Formatter::new();
     let doc = ast.walk(&mut formatter);
+    let doc_build_end = doc_build_start.elapsed().as_micros();
+
+    let traverse_start = std::time::Instant::now();
     let mut doc_formatter = DocFormatter::new(40, 4);
     let result = doc_formatter.format(&doc);
     let traverse_end = traverse_start.elapsed().as_micros();
@@ -52,7 +55,8 @@ fn main() {
     println!("File Open Time taken: {}us", end_file);
     println!("Lex Time taken: {}us", lex_time);
     println!("Parse Time taken: {}us", parse_time);
-    println!("Traverse Time taken: {}us", traverse_end);
+    println!("Doc Build Time taken: {}us", doc_build_end);
+    println!("Doc Print Time taken: {}us", traverse_end);
     println!("Write Time taken: {}us", write_end);
     println!("Total Time taken: {}us", total_time);
 }
