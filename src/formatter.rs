@@ -489,7 +489,7 @@ impl Visitor<Doc> for Formatter {
 
         let mut full_arg_docs = vec![];
         while let Some(arg) = it.next() {
-            let mut arg_docs = vec![];
+            let mut arg_docs = Vec::with_capacity(4);
             match &arg.0 {
                 Some(token) => {
                     arg_docs.push(self.pop_comment(token, true));
@@ -651,7 +651,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_whitespace(&lambda_expression.left_paren.clone().unwrap()));
         }
 
-        let mut full_args_docs = vec![];
+        let mut full_args_docs = Vec::with_capacity(8);
         full_args_docs.push(Doc::Text("(".to_string()));
         if let Some(left_paren) = &lambda_expression.left_paren {
             full_args_docs.push(self.pop_trailing_comments(left_paren))
@@ -964,7 +964,7 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(Doc::Text("function ".to_string()));
 
-        let mut arg_docs = vec![];
+        let mut arg_docs = Vec::with_capacity(12);
 
         arg_docs.push(self.pop_comment(&function_definition.name, true));
         arg_docs.push(Doc::Text(function_definition.name.lexeme.to_string()));
@@ -978,7 +978,7 @@ impl Visitor<Doc> for Formatter {
 
         let mut param_docs = vec![];
         while let Some((param, comma_token)) = it.next() {
-            let mut param_doc = vec![];
+            let mut param_doc = Vec::with_capacity(14);
             if param.required.is_some() {
                 let required_token = param.required.as_ref().unwrap();
                 param_doc.push(self.pop_comment(&required_token, true));
@@ -1056,7 +1056,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_whitespace(&component_definition.component_token));
         self.beginning_statement = false;
 
-        let mut name_group = vec![];
+        let mut name_group = Vec::with_capacity(5);
         name_group.push(Doc::Text("component".to_string()));
         name_group.push(self.pop_trailing_comments(&component_definition.component_token));
         name_group.push(Doc::BreakableSpace);
@@ -1113,7 +1113,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_whitespace(&lucee_function.name));
         self.beginning_statement = false;
 
-        let mut name_group = vec![];
+        let mut name_group = Vec::with_capacity(4);
         name_group.push(Doc::Text(lucee_function.name.lexeme.to_string()));
         name_group.push(self.pop_trailing_comments(&lucee_function.name));
         name_group.push(Doc::Line);
@@ -1162,7 +1162,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_whitespace(&if_statement.if_token));
         self.beginning_statement = false;
 
-        let mut test_group = vec![];
+        let mut test_group = Vec::with_capacity(10);
         test_group.push(Doc::Text("if ".to_string()));
         test_group.push(self.pop_trailing_comments(&if_statement.if_token));
         test_group.push(self.pop_comment(&if_statement.left_paren, true));
@@ -1227,7 +1227,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_whitespace(&for_statement.for_token));
         self.beginning_statement = false;
 
-        let mut arg_docs = vec![];
+        let mut arg_docs = Vec::with_capacity(11);
         arg_docs.push(Doc::Text("for ".to_string()));
         arg_docs.push(self.pop_trailing_comments(&for_statement.for_token));
         arg_docs.push(self.pop_comment(&for_statement.left_paren, true));
@@ -1246,7 +1246,7 @@ impl Visitor<Doc> for Formatter {
                 increment,
                 ..
             } => {
-                let mut control_docs = vec![];
+                let mut control_docs = Vec::with_capacity(10);
                 if var_token.is_some() {
                     control_docs.push(self.pop_comment(&var_token.clone().unwrap(), true));
                 }
@@ -1269,7 +1269,7 @@ impl Visitor<Doc> for Formatter {
                 array,
                 ..
             } => {
-                let mut control_docs = vec![];
+                let mut control_docs = Vec::with_capacity(6);
                 if var_token.is_some() {
                     control_docs.push(self.pop_comment(&var_token.clone().unwrap(), true));
                 }
@@ -1320,7 +1320,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_whitespace(&while_statement.while_token));
             self.beginning_statement = false;
 
-            let mut while_docs = vec![];
+            let mut while_docs = Vec::with_capacity(11);
             while_docs.push(Doc::Text("while ".to_string()));
             while_docs.push(self.pop_trailing_comments(&while_statement.while_token));
             while_docs.push(self.pop_comment(&while_statement.left_paren, true));
@@ -1348,7 +1348,7 @@ impl Visitor<Doc> for Formatter {
         if while_statement.do_while {
             docs.push(self.pop_comment(&while_statement.while_token, true));
 
-            let mut while_docs = vec![];
+            let mut while_docs = Vec::with_capacity(11);
             while_docs.push(Doc::Text("while ".to_string()));
             while_docs.push(self.pop_trailing_comments(&while_statement.while_token));
             while_docs.push(self.pop_comment(&while_statement.left_paren, true));
@@ -1373,7 +1373,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_whitespace(&switch_statement.switch_token));
         self.beginning_statement = false;
 
-        let mut switch_docs = vec![];
+        let mut switch_docs = Vec::with_capacity(12);
         switch_docs.push(Doc::Text("switch ".to_string()));
         switch_docs.push(self.pop_trailing_comments(&switch_statement.switch_token));
         switch_docs.push(self.pop_comment(&switch_statement.left_paren, true));
@@ -1391,10 +1391,9 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(Doc::Group(switch_docs));
 
-        let mut full_body_docs = vec![];
+        let mut full_body_docs = Vec::with_capacity(6);
         full_body_docs.push(Doc::Text("{".to_string()));
         full_body_docs.push(self.pop_trailing_comments(&switch_statement.left_brace));
-        // full_body_docs.push(Doc::HardLine);
 
         self.collapse_whitespace = true;
         let mut body_docs = vec![];
@@ -1473,7 +1472,7 @@ impl Visitor<Doc> for Formatter {
             false, // try blocks don't use compact formatting
         ));
 
-        let mut catch_docs = vec![];
+        let mut catch_docs = Vec::with_capacity(12);
         catch_docs.push(self.pop_comment(&try_catch_statement.catch_token, true));
         catch_docs.push(Doc::Text(" catch ".to_string()));
         catch_docs.push(self.pop_trailing_comments(&try_catch_statement.catch_token));
@@ -1482,7 +1481,7 @@ impl Visitor<Doc> for Formatter {
         catch_docs.push(self.pop_trailing_comments(&try_catch_statement.left_paren));
         catch_docs.push(Doc::Line);
 
-        let mut catch_expression_docs = vec![];
+        let mut catch_expression_docs = Vec::with_capacity(6);
         match &try_catch_statement.catch_var_token {
             Some(var_token) => {
                 catch_expression_docs.push(self.pop_comment(var_token, true));
