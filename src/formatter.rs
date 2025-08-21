@@ -437,6 +437,54 @@ impl Formatter {
 
         result
     }
+
+    /// Formats an entire member expression chain as a single group
+    fn format_member_chain(&mut self, member_expression: &crate::ast::MemberAccess) -> Doc {
+        // Collect the entire chain manually to avoid borrowing issues
+        let mut chain_parts = Vec::new();
+        let mut current = member_expression;
+
+        // First pass: collect all the chain parts
+        loop {
+            chain_parts.push((current.dot_token.clone(), current.property.clone()));
+
+            match &current.object {
+                crate::ast::Expression::MemberAccess(member_access) => {
+                    current = member_access;
+                }
+                _ => {
+                    // We've reached the base object
+                    break;
+                }
+            }
+        }
+
+        // Reverse since we collected from right to left
+        chain_parts.reverse();
+
+        // Get the base object
+        let base_object = current.object.clone();
+
+        let mut docs = Vec::new();
+
+        // Add base object
+        docs.push(self.visit_expression(&base_object));
+
+        let mut indent_docs = vec![];
+
+        // Add all chained properties with consistent breaking
+        for (dot_token, property) in chain_parts {
+            indent_docs.push(Doc::Line); // Break before each dot
+            indent_docs.push(self.pop_comment(&dot_token, true));
+            indent_docs.push(Doc::Text(".".to_string()));
+            indent_docs.push(self.pop_trailing_comments(&dot_token));
+            indent_docs.push(self.visit_expression(&property));
+        }
+
+        docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
+
+        Doc::Group(docs) // Single group for entire chain
+    }
 }
 
 impl Visitor<Doc> for Formatter {
@@ -777,22 +825,35 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Text("(".to_string()));
         docs.push(self.pop_trailing_comments(&group_expression.left_paren));
         docs.push(Doc::Line);
-        docs.push(self.visit_expression(&group_expression.expr));
+        docs.push(Doc::Indent(Box::new(
+            self.visit_expression(&group_expression.expr),
+        )));
         docs.push(self.pop_comment(&group_expression.right_paren, true));
         docs.push(Doc::Line);
         docs.push(Doc::Text(")".to_string()));
         docs.push(self.pop_trailing_comments(&group_expression.right_paren));
         Doc::Group(docs)
     }
-    // TODO: Figure out how to properly wrap
     fn visit_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) -> Doc {
+        // Check if this member expression's object is also a member expression (indicating a chain)
+        if matches!(
+            &member_expression.object,
+            crate::ast::Expression::MemberAccess(_)
+        ) {
+            // This is part of a chain - use chain formatting for consistent breaking
+            return self.format_member_chain(member_expression);
+        }
+
+        // Simple member access (not part of a chain) - use existing logic
         let mut docs = Vec::with_capacity(6);
         docs.push(self.visit_expression(&member_expression.object));
-        docs.push(self.pop_comment(&member_expression.dot_token, true));
-        docs.push(Doc::Text(".".to_string()));
-        docs.push(self.pop_trailing_comments(&member_expression.dot_token));
-        docs.push(Doc::Line);
-        docs.push(self.visit_expression(&member_expression.property));
+        docs.push(Doc::Line); // Break before the dot
+        let mut indent_docs = vec![];
+        indent_docs.push(self.pop_comment(&member_expression.dot_token, true));
+        indent_docs.push(Doc::Text(".".to_string()));
+        indent_docs.push(self.pop_trailing_comments(&member_expression.dot_token));
+        indent_docs.push(self.visit_expression(&member_expression.property));
+        docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
         Doc::Group(docs)
     }
     // TODO: Figure out how to properly wrap
@@ -1349,7 +1410,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_comment(&while_statement.while_token, true));
 
             let mut while_docs = Vec::with_capacity(11);
-            while_docs.push(Doc::Text("while ".to_string()));
+            while_docs.push(Doc::Text(" while ".to_string()));
             while_docs.push(self.pop_trailing_comments(&while_statement.while_token));
             while_docs.push(self.pop_comment(&while_statement.left_paren, true));
             while_docs.push(Doc::Text("(".to_string()));
