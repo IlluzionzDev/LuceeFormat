@@ -125,6 +125,20 @@ impl DocFormatter {
     }
 }
 
+/// Represents different types of access operations in a chain
+#[derive(Clone)]
+enum AccessOperation<'ast> {
+    Member {
+        dot_token: crate::lexer::Token<'ast>,
+        property: crate::ast::Expression<'ast>,
+    },
+    Index {
+        left_bracket: crate::lexer::Token<'ast>,
+        index: crate::ast::Expression<'ast>,
+        right_bracket: crate::lexer::Token<'ast>,
+    },
+}
+
 pub struct Formatter {
     pub formatted_source: String,
 
@@ -438,105 +452,90 @@ impl Formatter {
         result
     }
 
-    /// Formats an entire member expression chain as a single group
-    fn format_member_chain(&mut self, member_expression: &crate::ast::MemberAccess) -> Doc {
-        // Collect the entire chain manually to avoid borrowing issues
-        let mut chain_parts = Vec::new();
-        let mut current = member_expression;
+    /// Detects if an expression is part of an access chain (member or index)
+    fn is_access_chain(expr: &crate::ast::Expression) -> bool {
+        matches!(
+            expr,
+            crate::ast::Expression::MemberAccess(_) | crate::ast::Expression::IndexAccess(_)
+        )
+    }
 
-        // First pass: collect all the chain parts
+    /// Formats a unified access chain (both member and index operations) as a single group
+    fn format_access_chain(&mut self, expr: &crate::ast::Expression) -> Doc {
+        // Collect the entire mixed chain
+        let mut operations: Vec<AccessOperation> = Vec::new();
+        let mut current_expr = expr;
+
+        // Traverse from right to left, collecting operations
         loop {
-            chain_parts.push((current.dot_token.clone(), current.property.clone()));
-
-            match &current.object {
+            match current_expr {
                 crate::ast::Expression::MemberAccess(member_access) => {
-                    current = member_access;
+                    operations.push(AccessOperation::Member {
+                        dot_token: member_access.dot_token.clone(),
+                        property: member_access.property.clone(),
+                    });
+                    current_expr = &member_access.object;
+                }
+                crate::ast::Expression::IndexAccess(index_access) => {
+                    operations.push(AccessOperation::Index {
+                        left_bracket: index_access.left_bracket.clone(),
+                        index: index_access.index.clone(),
+                        right_bracket: index_access.right_bracket.clone(),
+                    });
+                    current_expr = &index_access.object;
                 }
                 _ => {
-                    // We've reached the base object
+                    // Reached base object
                     break;
                 }
             }
         }
 
         // Reverse since we collected from right to left
-        chain_parts.reverse();
-
-        // Get the base object
-        let base_object = current.object.clone();
+        operations.reverse();
 
         let mut docs = Vec::new();
 
         // Add base object
-        docs.push(self.visit_expression(&base_object));
+        docs.push(self.visit_expression(current_expr));
 
         let mut indent_docs = vec![];
 
-        // Add all chained properties with consistent breaking
-        for (dot_token, property) in chain_parts {
-            indent_docs.push(Doc::Line); // Break before each dot
-            indent_docs.push(self.pop_comment(&dot_token, true));
-            indent_docs.push(Doc::Text(".".to_string()));
-            indent_docs.push(self.pop_trailing_comments(&dot_token));
-            indent_docs.push(self.visit_expression(&property));
+        // Add all operations with consistent breaking
+        for operation in operations {
+            match operation {
+                AccessOperation::Member {
+                    dot_token,
+                    property,
+                } => {
+                    indent_docs.push(Doc::Line); // Break before each dot
+                    indent_docs.push(self.pop_comment(&dot_token, true));
+                    indent_docs.push(Doc::Text(".".to_string()));
+                    indent_docs.push(self.pop_trailing_comments(&dot_token));
+                    indent_docs.push(self.visit_expression(&property));
+                }
+                AccessOperation::Index {
+                    left_bracket,
+                    index,
+                    right_bracket,
+                } => {
+                    indent_docs.push(Doc::Line); // Break before each bracket
+                    indent_docs.push(self.pop_comment(&left_bracket, true));
+                    indent_docs.push(Doc::Text("[".to_string()));
+                    indent_docs.push(self.pop_trailing_comments(&left_bracket));
+                    // indent_docs.push(Doc::Line);
+                    indent_docs.push(self.visit_expression(&index));
+                    indent_docs.push(self.pop_comment(&right_bracket, true));
+                    // indent_docs.push(Doc::Line);
+                    indent_docs.push(Doc::Text("]".to_string()));
+                    indent_docs.push(self.pop_trailing_comments(&right_bracket));
+                }
+            }
         }
 
         docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
 
-        Doc::Group(docs) // Single group for entire chain
-    }
-
-    /// Formats an entire index access chain as a single group
-    fn format_index_chain(&mut self, index_access: &crate::ast::IndexAccess) -> Doc {
-        // Collect the entire chain manually to avoid borrowing issues
-        let mut chain_parts = Vec::new();
-        let mut current_expr =
-            &crate::ast::Expression::IndexAccess(std::rc::Rc::new(index_access.clone()));
-
-        // First pass: collect all the index parts
-        loop {
-            match current_expr {
-                crate::ast::Expression::IndexAccess(index_access) => {
-                    chain_parts.push((
-                        index_access.left_bracket.clone(),
-                        index_access.index.clone(),
-                        index_access.right_bracket.clone(),
-                    ));
-                    current_expr = &index_access.object;
-                }
-                _ => {
-                    // We've reached the base object (not an index access)
-                    break;
-                }
-            }
-        }
-
-        // Reverse since we collected from right to left
-        chain_parts.reverse();
-
-        // Get the base object
-        let base_object = current_expr.clone();
-
-        let mut docs = Vec::new();
-
-        // Add base object
-        docs.push(self.visit_expression(&base_object));
-
-        // Add all chained index accesses with consistent breaking
-        for (left_bracket, index, right_bracket) in chain_parts {
-            docs.push(Doc::Line); // Break before each bracket
-            docs.push(self.pop_comment(&left_bracket, true));
-            docs.push(Doc::Text("[".to_string()));
-            docs.push(self.pop_trailing_comments(&left_bracket));
-            docs.push(Doc::Line);
-            docs.push(Doc::Indent(Box::new(self.visit_expression(&index))));
-            docs.push(self.pop_comment(&right_bracket, true));
-            docs.push(Doc::Line);
-            docs.push(Doc::Text("]".to_string()));
-            docs.push(self.pop_trailing_comments(&right_bracket));
-        }
-
-        Doc::Group(docs) // Single group for entire chain
+        Doc::Group(docs) // Single group for entire mixed chain
     }
 }
 
@@ -888,13 +887,12 @@ impl Visitor<Doc> for Formatter {
         Doc::Group(docs)
     }
     fn visit_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) -> Doc {
-        // Check if this member expression's object is also a member expression (indicating a chain)
-        if matches!(
-            &member_expression.object,
-            crate::ast::Expression::MemberAccess(_)
-        ) {
-            // This is part of a chain - use chain formatting for consistent breaking
-            return self.format_member_chain(member_expression);
+        // Check if this member expression's object is part of an access chain (member or index)
+        if Self::is_access_chain(&member_expression.object) {
+            // This is part of a mixed access chain - use unified chain formatting
+            return self.format_access_chain(&crate::ast::Expression::MemberAccess(
+                std::rc::Rc::new(member_expression.clone()),
+            ));
         }
 
         // Simple member access (not part of a chain) - use existing logic
@@ -910,10 +908,12 @@ impl Visitor<Doc> for Formatter {
         Doc::Group(docs)
     }
     fn visit_index_access(&mut self, index_access: &crate::ast::IndexAccess) -> Doc {
-        // Check if this index access's object is also an index access (indicating a chain)
-        if matches!(&index_access.object, crate::ast::Expression::IndexAccess(_)) {
-            // This is part of a chain - use chain formatting for consistent breaking
-            return self.format_index_chain(index_access);
+        // Check if this index access's object is part of an access chain (member or index)
+        if Self::is_access_chain(&index_access.object) {
+            // This is part of a mixed access chain - use unified chain formatting
+            return self.format_access_chain(&crate::ast::Expression::IndexAccess(
+                std::rc::Rc::new(index_access.clone()),
+            ));
         }
 
         // Simple index access (not part of a chain) - use existing logic
@@ -922,12 +922,8 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&index_access.left_bracket, true));
         docs.push(Doc::Text("[".to_string()));
         docs.push(self.pop_trailing_comments(&index_access.left_bracket));
-        docs.push(Doc::Line);
-        docs.push(Doc::Indent(Box::new(
-            self.visit_expression(&index_access.index),
-        )));
+        docs.push(self.visit_expression(&index_access.index));
         docs.push(self.pop_comment(&index_access.right_bracket, true));
-        docs.push(Doc::Line);
         docs.push(Doc::Text("]".to_string()));
         docs.push(self.pop_trailing_comments(&index_access.right_bracket));
         Doc::Group(docs)
