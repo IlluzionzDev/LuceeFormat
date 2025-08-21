@@ -485,6 +485,59 @@ impl Formatter {
 
         Doc::Group(docs) // Single group for entire chain
     }
+
+    /// Formats an entire index access chain as a single group
+    fn format_index_chain(&mut self, index_access: &crate::ast::IndexAccess) -> Doc {
+        // Collect the entire chain manually to avoid borrowing issues
+        let mut chain_parts = Vec::new();
+        let mut current_expr =
+            &crate::ast::Expression::IndexAccess(std::rc::Rc::new(index_access.clone()));
+
+        // First pass: collect all the index parts
+        loop {
+            match current_expr {
+                crate::ast::Expression::IndexAccess(index_access) => {
+                    chain_parts.push((
+                        index_access.left_bracket.clone(),
+                        index_access.index.clone(),
+                        index_access.right_bracket.clone(),
+                    ));
+                    current_expr = &index_access.object;
+                }
+                _ => {
+                    // We've reached the base object (not an index access)
+                    break;
+                }
+            }
+        }
+
+        // Reverse since we collected from right to left
+        chain_parts.reverse();
+
+        // Get the base object
+        let base_object = current_expr.clone();
+
+        let mut docs = Vec::new();
+
+        // Add base object
+        docs.push(self.visit_expression(&base_object));
+
+        // Add all chained index accesses with consistent breaking
+        for (left_bracket, index, right_bracket) in chain_parts {
+            docs.push(Doc::Line); // Break before each bracket
+            docs.push(self.pop_comment(&left_bracket, true));
+            docs.push(Doc::Text("[".to_string()));
+            docs.push(self.pop_trailing_comments(&left_bracket));
+            docs.push(Doc::Line);
+            docs.push(Doc::Indent(Box::new(self.visit_expression(&index))));
+            docs.push(self.pop_comment(&right_bracket, true));
+            docs.push(Doc::Line);
+            docs.push(Doc::Text("]".to_string()));
+            docs.push(self.pop_trailing_comments(&right_bracket));
+        }
+
+        Doc::Group(docs) // Single group for entire chain
+    }
 }
 
 impl Visitor<Doc> for Formatter {
@@ -856,15 +909,23 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
         Doc::Group(docs)
     }
-    // TODO: Figure out how to properly wrap
     fn visit_index_access(&mut self, index_access: &crate::ast::IndexAccess) -> Doc {
+        // Check if this index access's object is also an index access (indicating a chain)
+        if matches!(&index_access.object, crate::ast::Expression::IndexAccess(_)) {
+            // This is part of a chain - use chain formatting for consistent breaking
+            return self.format_index_chain(index_access);
+        }
+
+        // Simple index access (not part of a chain) - use existing logic
         let mut docs = Vec::with_capacity(10);
         docs.push(self.visit_expression(&index_access.object));
         docs.push(self.pop_comment(&index_access.left_bracket, true));
         docs.push(Doc::Text("[".to_string()));
         docs.push(self.pop_trailing_comments(&index_access.left_bracket));
         docs.push(Doc::Line);
-        docs.push(self.visit_expression(&index_access.index));
+        docs.push(Doc::Indent(Box::new(
+            self.visit_expression(&index_access.index),
+        )));
         docs.push(self.pop_comment(&index_access.right_bracket, true));
         docs.push(Doc::Line);
         docs.push(Doc::Text("]".to_string()));
