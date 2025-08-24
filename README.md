@@ -13,12 +13,15 @@ complex rules, and just runs through tokens in microseconds.
 # Dev TODO
 
 - [X] Preserve comments/whitespace in AST
-- [ ] Properly handle breaking lines while formatting
--   [ ] Determine inline-ness of comments when wrapping
+- [X] Properly handle breaking lines while formatting
+-   [X] Determine inline-ness of comments when wrapping
 - [ ] Better error handling
 - [ ] Robust tests
 - [ ] (Future) Add linting capabilities
 
 ## Rough Current Todos
 
+- Arena allocator for AST nodes
 - Line breaks with '// comments' as "inline" comments should preserve line breaks
+- ^ Need a way for a Doc node to "force" it's group to break
+- Actually fix wrapping for Index and member access

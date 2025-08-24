@@ -14,15 +14,15 @@ pub struct AST<'ast> {
     pub statements: Vec<Statement<'ast>>,
 }
 
-impl<'ast> Walkable for AST<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit(self);
+impl<'ast, T> Walkable<T> for AST<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit(self)
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Statement<'ast> {
-    ExpressionStmt(Rc<Expression<'ast>>),
+    ExpressionStmt(Rc<ExpressionStatement<'ast>>),
     VariableDeclaration(Rc<VariableDeclaration<'ast>>),
     VariableAssignment(Rc<VariableAssignment<'ast>>),
     ReturnStatement(Rc<ReturnStatement<'ast>>),
@@ -36,9 +36,21 @@ pub enum Statement<'ast> {
     TryCatchStatement(Rc<TryCatchStatement<'ast>>),
 }
 
-impl<'ast> Walkable for Statement<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_statement(self);
+impl<'ast, T> Walkable<T> for Statement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_statement(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExpressionStatement<'ast> {
+    pub expression: Expression<'ast>,
+    pub semicolon_token: Option<Token<'ast>>,
+}
+
+impl<'ast, T> Walkable<T> for ExpressionStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_expression_statement(self)
     }
 }
 
@@ -48,11 +60,12 @@ pub struct VariableDeclaration<'ast> {
     pub name: Token<'ast>,
     pub equals_token: Token<'ast>,
     pub value: Expression<'ast>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
-impl<'ast> Walkable for VariableDeclaration<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_variable_declaration(self);
+impl<'ast, T> Walkable<T> for VariableDeclaration<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_variable_declaration(self)
     }
 }
 
@@ -61,11 +74,12 @@ pub struct VariableAssignment<'ast> {
     pub name: Expression<'ast>,
     pub equals_token: Token<'ast>,
     pub value: Expression<'ast>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
-impl<'ast> Walkable for VariableAssignment<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_variable_assignment(self);
+impl<'ast, T> Walkable<T> for VariableAssignment<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_variable_assignment(self)
     }
 }
 
@@ -73,11 +87,12 @@ impl<'ast> Walkable for VariableAssignment<'ast> {
 pub struct ReturnStatement<'ast> {
     pub return_token: Token<'ast>,
     pub value: Option<Expression<'ast>>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
-impl<'ast> Walkable for ReturnStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_return_statement(self);
+impl<'ast, T> Walkable<T> for ReturnStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_return_statement(self)
     }
 }
 
@@ -88,11 +103,12 @@ pub struct LuceeFunction<'ast> {
     pub body: Option<Vec<Statement<'ast>>>,
     pub left_brace: Option<Token<'ast>>,
     pub right_brace: Option<Token<'ast>>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
-impl<'ast> Walkable for LuceeFunction<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_lucee_function(self);
+impl<'ast, T> Walkable<T> for LuceeFunction<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_lucee_function(self)
     }
 }
 
@@ -111,12 +127,13 @@ pub enum Expression<'ast> {
     GroupExpression(Rc<GroupExpression<'ast>>),
     MemberAccess(Rc<MemberAccess<'ast>>),
     IndexAccess(Rc<IndexAccess<'ast>>),
+    StaticAccess(Rc<StaticAccess<'ast>>),
     None, // Trying to consume expression but there is none. Represented by blank space
 }
 
-impl<'ast> Walkable for Expression<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_expression(self);
+impl<'ast, T> Walkable<T> for Expression<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_expression(self)
     }
 }
 
@@ -125,12 +142,13 @@ pub struct FunctionCall<'ast> {
     pub name: Expression<'ast>,
     pub left_paren: Token<'ast>,
     pub right_paren: Token<'ast>,
-    pub args: Vec<(Option<Token<'ast>>, Expression<'ast>)>,
+    // 1: Identifier, 2: Expression, 3: Optional comma
+    pub args: Vec<(Option<Token<'ast>>, Expression<'ast>, Option<Token<'ast>>)>,
 }
 
-impl<'ast> Walkable for FunctionCall<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_function_call(self);
+impl<'ast, T> Walkable<T> for FunctionCall<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_function_call(self)
     }
 }
 
@@ -140,9 +158,9 @@ pub struct ObjectCreation<'ast> {
     pub expr: Expression<'ast>,
 }
 
-impl<'ast> Walkable for ObjectCreation<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_object_creation(self);
+impl<'ast, T> Walkable<T> for ObjectCreation<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_object_creation(self)
     }
 }
 
@@ -150,12 +168,13 @@ impl<'ast> Walkable for ObjectCreation<'ast> {
 pub struct ArrayExpression<'ast> {
     pub left_bracket: Token<'ast>,
     pub right_bracket: Token<'ast>,
-    pub elements: Vec<Expression<'ast>>,
+    // Each element may have a comma token after it (except the last one)
+    pub elements: Vec<(Expression<'ast>, Option<Token<'ast>>)>,
 }
 
-impl<'ast> Walkable for ArrayExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_array_expression(self);
+impl<'ast, T> Walkable<T> for ArrayExpression<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_array_expression(self)
     }
 }
 
@@ -163,29 +182,31 @@ impl<'ast> Walkable for ArrayExpression<'ast> {
 pub struct StructExpression<'ast> {
     pub left_brace: Token<'ast>,
     pub right_brace: Token<'ast>,
-    pub elements: Vec<(Token<'ast>, Expression<'ast>)>,
+    pub elements: Vec<(Token<'ast>, Expression<'ast>, Option<Token<'ast>>)>,
 }
 
-impl<'ast> Walkable for StructExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_struct_expression(self);
+impl<'ast, T> Walkable<T> for StructExpression<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_struct_expression(self)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct LambdaExpression<'ast> {
+    pub function_token: Option<Token<'ast>>,
     pub left_paren: Option<Token<'ast>>,
     pub right_paren: Option<Token<'ast>>,
-    pub parameters: Vec<Token<'ast>>,
+    // 1: Arg identifier, 2: Optional comma
+    pub parameters: Vec<(Token<'ast>, Option<Token<'ast>>)>,
     pub lambda_token: Token<'ast>,
     pub left_brace: Option<Token<'ast>>,
     pub right_brace: Option<Token<'ast>>,
     pub body: Vec<Statement<'ast>>,
 }
 
-impl<'ast> Walkable for LambdaExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_lambda_expression(self);
+impl<'ast, T> Walkable<T> for LambdaExpression<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_lambda_expression(self)
     }
 }
 
@@ -196,9 +217,9 @@ pub struct BinaryExpression<'ast> {
     pub right: Expression<'ast>,
 }
 
-impl<'ast> Walkable for BinaryExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_binary_expression(self);
+impl<'ast, T> Walkable<T> for BinaryExpression<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_binary_expression(self)
     }
 }
 
@@ -208,9 +229,9 @@ pub struct UnaryExpression<'ast> {
     pub expr: Expression<'ast>,
 }
 
-impl<'ast> Walkable for UnaryExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_unary_expression(self);
+impl<'ast, T> Walkable<T> for UnaryExpression<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_unary_expression(self)
     }
 }
 
@@ -223,9 +244,9 @@ pub struct TernaryExpression<'ast> {
     pub false_expr: Expression<'ast>,
 }
 
-impl<'ast> Walkable for TernaryExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_ternary_expression(self);
+impl<'ast, T> Walkable<T> for TernaryExpression<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_ternary_expression(self)
     }
 }
 
@@ -236,9 +257,9 @@ pub struct GroupExpression<'ast> {
     pub right_paren: Token<'ast>,
 }
 
-impl<'ast> Walkable for GroupExpression<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_group_expression(self);
+impl<'ast, T> Walkable<T> for GroupExpression<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_group_expression(self)
     }
 }
 
@@ -249,9 +270,9 @@ pub struct MemberAccess<'ast> {
     pub property: Expression<'ast>,
 }
 
-impl<'ast> Walkable for MemberAccess<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_member_expression(self);
+impl<'ast, T> Walkable<T> for MemberAccess<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_member_expression(self)
     }
 }
 
@@ -263,9 +284,22 @@ pub struct IndexAccess<'ast> {
     pub right_bracket: Token<'ast>,
 }
 
-impl<'ast> Walkable for IndexAccess<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_index_access(self);
+impl<'ast, T> Walkable<T> for IndexAccess<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_index_access(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticAccess<'ast> {
+    pub class_name: Token<'ast>,
+    pub colon_colon_token: Token<'ast>,
+    pub function_call: FunctionCall<'ast>,
+}
+
+impl<'ast, T> Walkable<T> for StaticAccess<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_static_access(self)
     }
 }
 
@@ -283,9 +317,9 @@ pub enum LiteralValue {
     Null,
 }
 
-impl<'ast> Walkable for Literal<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_literal(self);
+impl<'ast, T> Walkable<T> for Literal<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_literal(self)
     }
 }
 
@@ -319,6 +353,12 @@ pub enum BinaryOperator {
     PlusPlus,
     MinusMinus,
     ConcatEqual,
+}
+
+impl PartialEq<Self> for BinaryOperator {
+    fn eq(&self, other: &Self) -> bool {
+        return self.to_lexeme().eq(other.to_lexeme());
+    }
 }
 
 impl BinaryOperator {
@@ -379,16 +419,16 @@ pub struct FunctionDefinition<'ast> {
     pub function_token: Token<'ast>,
     pub name: Token<'ast>,
     pub left_paren: Token<'ast>,
-    pub parameters: Vec<Parameter<'ast>>,
+    pub parameters: Vec<(Parameter<'ast>, Option<Token<'ast>>)>,
     pub right_paren: Token<'ast>,
     pub body: Vec<Statement<'ast>>,
     pub left_brace: Token<'ast>,
     pub right_brace: Token<'ast>,
 }
 
-impl<'ast> Walkable for FunctionDefinition<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_function_definition(self);
+impl<'ast, T> Walkable<T> for FunctionDefinition<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_function_definition(self)
     }
 }
 
@@ -401,9 +441,9 @@ pub struct ComponentDefinition<'ast> {
     pub right_brace: Token<'ast>,
 }
 
-impl<'ast> Walkable for ComponentDefinition<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_component_definition(self);
+impl<'ast, T> Walkable<T> for ComponentDefinition<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_component_definition(self)
     }
 }
 
@@ -439,9 +479,9 @@ pub struct IfStatement<'ast> {
     pub else_token: Option<Token<'ast>>,
 }
 
-impl<'ast> Walkable for IfStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_if_statement(self);
+impl<'ast, T> Walkable<T> for IfStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_if_statement(self)
     }
 }
 
@@ -475,9 +515,9 @@ pub enum ForControl<'ast> {
     },
 }
 
-impl<'ast> Walkable for ForStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_for_statement(self);
+impl<'ast, T> Walkable<T> for ForStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_for_statement(self)
     }
 }
 
@@ -494,9 +534,9 @@ pub struct WhileStatement<'ast> {
     pub right_brace: Token<'ast>,
 }
 
-impl<'ast> Walkable for WhileStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_while_statement(self);
+impl<'ast, T> Walkable<T> for WhileStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_while_statement(self)
     }
 }
 
@@ -519,9 +559,9 @@ pub struct CaseStatement<'ast> {
     pub body: Vec<Statement<'ast>>,
 }
 
-impl<'ast> Walkable for SwitchStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_switch_statement(self);
+impl<'ast, T> Walkable<T> for SwitchStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_switch_statement(self)
     }
 }
 
@@ -542,8 +582,8 @@ pub struct TryCatchStatement<'ast> {
     pub catch_right_brace: Token<'ast>,
 }
 
-impl<'ast> Walkable for TryCatchStatement<'ast> {
-    fn walk<V: crate::visitor::Visitor>(&self, visitor: &mut V) {
-        visitor.visit_try_catch_statement(self);
+impl<'ast, T> Walkable<T> for TryCatchStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_try_catch_statement(self)
     }
 }
