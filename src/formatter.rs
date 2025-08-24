@@ -139,6 +139,13 @@ enum AccessOperation<'ast> {
     },
 }
 
+/// Represents a binary operation in a chain
+#[derive(Clone)]
+struct BinaryOperation<'ast> {
+    operator: crate::lexer::Token<'ast>,
+    right_operand: crate::ast::Expression<'ast>,
+}
+
 pub struct Formatter {
     pub formatted_source: String,
 
@@ -460,6 +467,38 @@ impl Formatter {
         )
     }
 
+    /// Detects if an expression is part of a binary expression chain
+    fn is_binary_chain(expr: &crate::ast::Expression) -> bool {
+        matches!(expr, crate::ast::Expression::BinaryExpression(_))
+    }
+
+    /// Get precedence level for binary operators to ensure only same-precedence chains
+    fn get_operator_precedence(&self, op: &BinaryOperator) -> u8 {
+        match op {
+            BinaryOperator::LogicalOr => 1,
+            BinaryOperator::LogicalAnd => 2,
+            BinaryOperator::Or => 3,
+            BinaryOperator::Xor => 4,
+            BinaryOperator::And => 5,
+            BinaryOperator::Equal
+            | BinaryOperator::NotEqual
+            | BinaryOperator::Eq
+            | BinaryOperator::Neq => 6,
+            BinaryOperator::Less
+            | BinaryOperator::Greater
+            | BinaryOperator::LessEqual
+            | BinaryOperator::GreaterEqual
+            | BinaryOperator::Lt
+            | BinaryOperator::Gt => 7,
+            BinaryOperator::Contains => 8,
+            BinaryOperator::StringConcat => 9,
+            BinaryOperator::Add | BinaryOperator::Subtract => 10,
+            BinaryOperator::Multiply | BinaryOperator::Divide => 11,
+            // Assignment operators and increment/decrement don't chain
+            _ => 255, // Max value to prevent chaining
+        }
+    }
+
     /// Formats a unified access chain (both member and index operations) as a single group
     fn format_access_chain(&mut self, expr: &crate::ast::Expression) -> Doc {
         // Collect the entire mixed chain
@@ -536,6 +575,109 @@ impl Formatter {
         docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
 
         Doc::Group(docs) // Single group for entire mixed chain
+    }
+
+    /// Formats a binary expression chain as a single group for consistent line breaking
+    fn format_binary_chain(&mut self, expr: &crate::ast::Expression) -> Doc {
+        // Collect the entire binary chain of same-precedence operations
+        let mut operations: Vec<BinaryOperation> = Vec::new();
+        let mut current_expr = expr;
+        let mut chain_precedence: Option<u8> = None;
+
+        // Traverse left side, collecting same-precedence operations
+        loop {
+            match current_expr {
+                crate::ast::Expression::BinaryExpression(binary_expr) => {
+                    let op_precedence =
+                        self.get_operator_precedence(&binary_expr.op.to_binary_op());
+
+                    // Initialize or check precedence consistency
+                    match chain_precedence {
+                        None => chain_precedence = Some(op_precedence),
+                        Some(precedence) if precedence != op_precedence => break,
+                        Some(_) => {} // Same precedence, continue chaining
+                    }
+
+                    // Don't chain increment/decrement operators (they're special)
+                    if matches!(
+                        binary_expr.op.to_binary_op(),
+                        BinaryOperator::PlusPlus | BinaryOperator::MinusMinus
+                    ) {
+                        break;
+                    }
+
+                    operations.push(BinaryOperation {
+                        operator: binary_expr.op.clone(),
+                        right_operand: binary_expr.right.clone(),
+                    });
+
+                    current_expr = &binary_expr.left;
+                }
+                _ => {
+                    // Reached base operand
+                    break;
+                }
+            }
+        }
+
+        // If we didn't collect multiple operations, not a chain
+        if operations.is_empty() {
+            // Fall back to single binary expression formatting
+            return self.format_single_binary_expression(expr);
+        }
+
+        // Reverse since we collected from right to left
+        operations.reverse();
+
+        let mut docs = Vec::new();
+
+        // Add base operand (leftmost)
+        docs.push(self.visit_expression(current_expr));
+
+        let mut indent_docs = vec![];
+
+        // Add all operations with consistent breaking
+        for operation in operations {
+            indent_docs.push(Doc::BreakableSpace); // Break before each operator
+            indent_docs.push(self.pop_comment(&operation.operator, true));
+            indent_docs.push(Doc::Text(operation.operator.lexeme.to_string()));
+            indent_docs.push(self.pop_trailing_comments(&operation.operator));
+            indent_docs.push(Doc::Text(" ".to_string()));
+            indent_docs.push(self.visit_expression(&operation.right_operand));
+        }
+
+        docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
+
+        Doc::Group(docs)
+    }
+
+    /// Formats a single binary expression (fallback when not part of chain)
+    fn format_single_binary_expression(&mut self, expr: &crate::ast::Expression) -> Doc {
+        if let crate::ast::Expression::BinaryExpression(binary_expr) = expr {
+            let mut docs = Vec::with_capacity(7);
+            if matches!(
+                binary_expr.op.to_binary_op(),
+                BinaryOperator::PlusPlus | BinaryOperator::MinusMinus
+            ) {
+                // Special handling for increment/decrement
+                docs.push(self.visit_expression(&binary_expr.left));
+                docs.push(self.pop_comment(&binary_expr.op, true));
+                docs.push(Doc::Text(binary_expr.op.lexeme.to_string()));
+                docs.push(self.pop_trailing_comments(&binary_expr.op));
+            } else {
+                // Normal binary expression
+                docs.push(self.visit_expression(&binary_expr.left));
+                docs.push(Doc::Text(" ".to_string()));
+                docs.push(self.pop_comment(&binary_expr.op, true));
+                docs.push(Doc::Text(binary_expr.op.lexeme.to_string()));
+                docs.push(self.pop_trailing_comments(&binary_expr.op));
+                docs.push(Doc::Text(" ".to_string()));
+                docs.push(self.visit_expression(&binary_expr.right));
+            }
+            Doc::Group(docs)
+        } else {
+            Doc::Nil // Should not happen
+        }
     }
 }
 
@@ -813,27 +955,19 @@ impl Visitor<Doc> for Formatter {
 
         Doc::Group(docs)
     }
-    // TODO: Need to wrap binary expressions that are too long
     fn visit_binary_expression(&mut self, binary_expression: &crate::ast::BinaryExpression) -> Doc {
-        let mut docs = Vec::with_capacity(7);
-        if (binary_expression.op.to_binary_op() == BinaryOperator::PlusPlus
-            || binary_expression.op.to_binary_op() == BinaryOperator::MinusMinus)
-        {
-            docs.push(self.visit_expression(&binary_expression.left));
-            docs.push(self.pop_comment(&binary_expression.op, true));
-            docs.push(Doc::Text(binary_expression.op.lexeme.to_string()));
-            docs.push(self.pop_trailing_comments(&binary_expression.op));
-        } else {
-            docs.push(self.visit_expression(&binary_expression.left));
-            docs.push(Doc::Text(" ".to_string()));
-            docs.push(self.pop_comment(&binary_expression.op, true));
-            docs.push(Doc::Text(binary_expression.op.lexeme.to_string()));
-            docs.push(self.pop_trailing_comments(&binary_expression.op));
-            docs.push(Doc::Text(" ".to_string()));
-            docs.push(self.visit_expression(&binary_expression.right));
+        // Check if this binary expression's left operand is part of a chain
+        if Self::is_binary_chain(&binary_expression.left) {
+            // This is part of a binary chain - use unified chain formatting
+            return self.format_binary_chain(&crate::ast::Expression::BinaryExpression(
+                std::rc::Rc::new(binary_expression.clone()),
+            ));
         }
 
-        Doc::Group(docs)
+        // Single binary expression
+        self.format_single_binary_expression(&crate::ast::Expression::BinaryExpression(
+            std::rc::Rc::new(binary_expression.clone()),
+        ))
     }
     fn visit_unary_expression(&mut self, unary_expression: &crate::ast::UnaryExpression) -> Doc {
         let mut docs = Vec::with_capacity(5);
