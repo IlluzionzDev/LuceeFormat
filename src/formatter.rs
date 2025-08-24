@@ -402,7 +402,16 @@ impl Formatter {
             return format!("{}", trimmed);
         }
 
-        let content = trimmed.trim_start_matches("/*").trim_end_matches("*/");
+        // Detect comment type (javadoc /** vs regular /*)
+        let is_javadoc = trimmed.starts_with("/**");
+        let start_marker = if is_javadoc { "/**" } else { "/*" };
+        
+        // Use appropriate trimming based on comment type
+        let content = if is_javadoc {
+            trimmed.trim_start_matches("/**").trim_end_matches("*/")
+        } else {
+            trimmed.trim_start_matches("/*").trim_end_matches("*/")
+        };
 
         // Collect non-empty lines and normalize indent
         let lines: Vec<&str> = content.lines().collect();
@@ -438,7 +447,7 @@ impl Formatter {
 
         let mut result = String::new();
         // Indent already printed before this char
-        result.push_str("/*\n");
+        result.push_str(&format!("{}\n", start_marker));
 
         for (i, line) in cleaned.iter().enumerate() {
             // Add current indent before every line
