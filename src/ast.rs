@@ -182,6 +182,7 @@ impl<'ast, T> Walkable<T> for ArrayExpression<'ast> {
 pub struct StructExpression<'ast> {
     pub left_brace: Token<'ast>,
     pub right_brace: Token<'ast>,
+    // 1: Key (Token), 2: Value (Expression), 3: Optional comma
     pub elements: Vec<(Token<'ast>, Expression<'ast>, Option<Token<'ast>>)>,
 }
 

@@ -1133,7 +1133,10 @@ impl<'ast> Parser<'ast> {
             while !self.check(TokenType::RightBrace) {
                 // Key is identifier or String
                 let mut key = None;
-                if self.check(TokenType::Identifier) || self.check(TokenType::String) {
+                if self.check(TokenType::Identifier)
+                    || self.check(TokenType::String)
+                    || self.check(TokenType::Number)
+                {
                     key = Some(self.advance().clone());
                 } else {
                     self.error("Expected struct key");
