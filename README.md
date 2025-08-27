@@ -19,9 +19,13 @@ complex rules, and just runs through tokens in microseconds.
 - [ ] Robust tests
 - [ ] (Future) Add linting capabilities
 
-## Rough Current Todos
+## Breaking TODOS (Need to be done before production code formatter)
+
+- Can specify named args with '=' AND ':'
+- Preserve quotes used for strings
+
+## Backlog TODOS (Niceties but not critical)
 
 - Arena allocator for AST nodes
 - Line breaks with '// comments' as "inline" comments should preserve line breaks
 - ^ Need a way for a Doc node to "force" it's group to break
-- Actually fix wrapping for Index and member access
