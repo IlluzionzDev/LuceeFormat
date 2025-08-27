@@ -4,7 +4,7 @@ use crate::ast::{
     ComponentDefinition, Expression, ExpressionStatement, ForControl, ForStatement, FunctionCall,
     FunctionDefinition, GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal,
     LiteralValue, LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement,
-    Statement, StaticAccess, StructExpression, SwitchStatement, TernaryExpression,
+    Statement, StaticAccess, StringValue, StructExpression, SwitchStatement, TernaryExpression,
     TryCatchStatement, UnaryExpression, UnaryOperator, VariableAssignment, VariableDeclaration,
     WhileStatement, AST,
 };
@@ -320,7 +320,7 @@ impl<'ast> Parser<'ast> {
             _ => None,
         };
         let mut access_modifier_token = None;
-        if (access_modifier.is_some()) {
+        if access_modifier.is_some() {
             access_modifier_token = Some(self.advance().clone());
         }
 
@@ -993,9 +993,18 @@ impl<'ast> Parser<'ast> {
         if self.check(TokenType::String) {
             let token = self.advance().clone();
             let value: String = String::from(token.lexeme);
+
+            // Detect if is double quote based on first char of value
+            let is_double_quote = token.lexeme.starts_with('"') && token.lexeme.ends_with('"');
+            // Take raw value without quotes
+            let raw_value = &value[1..value.len() - 1];
+
             return ExpLiteral(Rc::new(Literal {
                 token,
-                value: LiteralValue::String(value),
+                value: LiteralValue::String(StringValue {
+                    value: String::from(raw_value),
+                    is_double_quote,
+                }),
             }));
         }
 
@@ -1290,11 +1299,13 @@ impl<'ast> Parser<'ast> {
             let mut arguments = Vec::new();
 
             loop {
-                // Named argument
-                if self.check_next(TokenType::Equal) {
+                // Named argument, can use either = or : to express
+                if self.check_next(TokenType::Equal) || self.check_next(TokenType::Colon) {
                     let name = self.advance().clone();
 
-                    self.consume(TokenType::Equal, "Expected '='");
+                    // Consume either = or :
+                    self.advance_check(TokenType::Colon);
+                    self.advance_check(TokenType::Equal);
 
                     let value = self.expression();
 

@@ -15,17 +15,17 @@ complex rules, and just runs through tokens in microseconds.
 - [X] Preserve comments/whitespace in AST
 - [X] Properly handle breaking lines while formatting
 -   [X] Determine inline-ness of comments when wrapping
+- [ ] When printing struct keys, if is string and has spaces, preserve quotes
 - [ ] Better error handling
 - [ ] Robust tests
 - [ ] (Future) Add linting capabilities
 
 ## Breaking TODOS (Need to be done before production code formatter)
 
-- Can specify named args with '=' AND ':'
-- Preserve quotes used for strings
+- Line breaks with '// comments' as "inline" comments should preserve line breaks
+- ^ Need a way for a Doc node to "force" it's group to break
+- finally to try catch statement
 
 ## Backlog TODOS (Niceties but not critical)
 
 - Arena allocator for AST nodes
-- Line breaks with '// comments' as "inline" comments should preserve line breaks
-- ^ Need a way for a Doc node to "force" it's group to break

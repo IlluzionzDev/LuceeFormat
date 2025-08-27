@@ -405,7 +405,7 @@ impl Formatter {
         // Detect comment type (javadoc /** vs regular /*)
         let is_javadoc = trimmed.starts_with("/**");
         let start_marker = if is_javadoc { "/**" } else { "/*" };
-        
+
         // Use appropriate trimming based on comment type
         let content = if is_javadoc {
             trimmed.trim_start_matches("/**").trim_end_matches("*/")
@@ -710,7 +710,13 @@ impl Visitor<Doc> for Formatter {
         let literal_value = &literal.value;
         let value = match literal_value {
             LiteralValue::Number(number) => number.to_string(),
-            LiteralValue::String(string) => '"'.to_string() + &*string.clone() + &*'"'.to_string(),
+            LiteralValue::String(string) => {
+                if string.is_double_quote {
+                    format!("\"{}\"", string.value)
+                } else {
+                    format!("\'{}\'", string.value)
+                }
+            }
             LiteralValue::Boolean(bool) => bool.to_string(),
             LiteralValue::Null => "null".to_string(),
         };
@@ -1562,7 +1568,7 @@ impl Visitor<Doc> for Formatter {
 
     fn visit_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) -> Doc {
         let mut docs = Vec::with_capacity(6);
-        if (while_statement.do_while) {
+        if while_statement.do_while {
             if while_statement.do_token.is_some() {
                 docs.push(self.pop_comment(
                     &while_statement.do_token.clone().unwrap(),

@@ -313,9 +313,18 @@ pub struct Literal<'ast> {
 #[derive(Debug, Clone)]
 pub enum LiteralValue {
     Number(f64),
-    String(String),
+    /// Strings always include the quotes in the Token.
+    /// This is so we know the original quotes of the source file
+    String(StringValue),
     Boolean(bool),
     Null,
+}
+
+#[derive(Debug, Clone)]
+pub struct StringValue {
+    pub value: String,
+    /// If the string was defined with double quotes. Important for preserving escape info
+    pub is_double_quote: bool,
 }
 
 impl<'ast, T> Walkable<T> for Literal<'ast> {

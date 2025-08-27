@@ -595,7 +595,7 @@ impl<'a> Lexer<'a> {
 
         self.advance();
 
-        let value = &self.source[self.start + 1..self.current - 1];
+        let value = &self.source[self.start..self.current];
         self.add_token_full(TokenType::String, value)
     }
 
