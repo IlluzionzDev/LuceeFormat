@@ -201,7 +201,8 @@ impl Formatter {
         self.collapse_whitespace = true;
 
         // Determine if we should use compact formatting
-        let use_compact = allow_compact && body.len() == 1;
+        // let use_compact = allow_compact && body.len() == 1;
+        let use_compact = false;
 
         // Add initial spacing
         if use_compact {
@@ -1383,7 +1384,8 @@ impl Visitor<Doc> for Formatter {
         let mut name_group = Vec::with_capacity(4);
         name_group.push(Doc::Text(lucee_function.name.lexeme.to_string()));
         name_group.push(self.pop_trailing_comments(&lucee_function.name));
-        name_group.push(Doc::Line);
+        // TODO: If body or args, space, otherwise no space
+        name_group.push(Doc::BreakableSpace);
 
         let mut param_docs = vec![];
         lucee_function.attributes.iter().for_each(|attribute| {
