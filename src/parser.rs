@@ -33,7 +33,7 @@ pub struct Parser<'ast> {
 * that it is correct
 */
 impl<'ast> Parser<'ast> {
-    pub fn new(source: &'ast str) -> Parser<'ast> {
+    pub fn new(source: &'ast str, file_name: &'ast str) -> Parser<'ast> {
         let mut lexer = Lexer::new(source);
         let current = lexer.scan_token();
         let ahead = lexer.scan_token();
@@ -52,8 +52,7 @@ impl<'ast> Parser<'ast> {
                 trailing_comments: None,
                 lines_before: 0,
             },
-            // TODO: Pass file name
-            named_source: NamedSource::new("source", source.to_string()),
+            named_source: NamedSource::new(file_name, source.to_string()),
             lex_time: 0,
         }
     }

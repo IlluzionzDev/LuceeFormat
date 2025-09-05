@@ -80,7 +80,11 @@ fn main() -> miette::Result<()> {
             // Compare file content with formatted content and see if matches
             let format_start = std::time::Instant::now();
             let source = std::fs::read_to_string(file_path).unwrap();
-            let formatted_source = format_content(&source, cli.max_line_length.unwrap_or(80))?;
+            let formatted_source = format_content(
+                &source,
+                file_path.to_str().unwrap(),
+                cli.max_line_length.unwrap_or(80),
+            )?;
             let format_time = format_start.elapsed().as_micros();
             println!("Checked {} in {}μs", file_path.display(), format_time);
 
@@ -178,7 +182,7 @@ fn process_file(file_path: &Path, max_line_length: usize) -> miette::Result<()> 
         let read_time = start_file.elapsed().as_micros();
 
         // Parse
-        let mut parser = parser::Parser::new(&source);
+        let mut parser = parser::Parser::new(&source, file_path.to_str().unwrap());
         let parse_start = std::time::Instant::now();
         let ast = parser.parse().map_err(Reports::from)?;
         let parse_total_time = parse_start.elapsed().as_micros();
@@ -217,9 +221,9 @@ fn process_file(file_path: &Path, max_line_length: usize) -> miette::Result<()> 
     Ok(())
 }
 
-fn format_content(input: &str, max_line_length: usize) -> miette::Result<String> {
+fn format_content(input: &str, file_name: &str, max_line_length: usize) -> miette::Result<String> {
     // Parse into AST (parser internally handles lexing)
-    let mut parser = parser::Parser::new(input);
+    let mut parser = parser::Parser::new(input, file_name);
     let ast = parser.parse().map_err(Reports::from)?;
 
     // Format the AST using the visitor pattern
@@ -236,8 +240,8 @@ fn write_file_safely(file_path: &Path, content: &str) {
     let temp_path = file_path.with_extension("cfc.tmp");
 
     // Write to temporary file first
-    std::fs::write(&temp_path, content);
+    let _ = std::fs::write(&temp_path, content);
 
     // Atomically replace the original file
-    std::fs::rename(&temp_path, file_path);
+    let _ = std::fs::rename(&temp_path, file_path);
 }
