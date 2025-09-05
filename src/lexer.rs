@@ -152,6 +152,16 @@ pub struct SourceSpan {
 }
 
 impl Token<'_> {
+    pub fn span(&self) -> miette::SourceSpan {
+        miette::SourceSpan::new(self.span.start.into(), self.span.end - self.span.start)
+    }
+
+    pub fn labeled_span(&self, label: &str) -> miette::LabeledSpan {
+        miette::LabeledSpan::at(self.span(), label)
+    }
+}
+
+impl Token<'_> {
     pub fn to_binary_op(&self) -> BinaryOperator {
         match self.token_type {
             TokenType::EqualEqual => BinaryOperator::Equal,
