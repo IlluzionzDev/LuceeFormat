@@ -180,6 +180,7 @@ impl<'ast, T> Walkable<T> for ArrayExpression<'ast> {
 
 #[derive(Debug, Clone)]
 pub struct StructExpression<'ast> {
+    pub is_empty: bool, // If true, struct was defined with "[:]"
     pub left_brace: Token<'ast>,
     pub right_brace: Token<'ast>,
     // 1: Key (Token), 2: Value (Expression), 3: Optional comma

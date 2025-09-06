@@ -844,6 +844,13 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_whitespace(&struct_expression.left_brace));
         self.beginning_statement = false;
 
+        // Just print empty struct
+        if struct_expression.is_empty {
+            docs.push(Doc::Text("[:]".to_string()));
+            docs.push(self.pop_trailing_comments(&struct_expression.right_brace));
+            return Doc::Group(docs);
+        }
+
         docs.push(Doc::Text("{".to_string()));
         docs.push(self.pop_trailing_comments(&struct_expression.left_brace));
         docs.push(Doc::BreakableSpace);

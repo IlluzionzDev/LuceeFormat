@@ -1391,6 +1391,31 @@ impl<'ast> Parser<'ast> {
         // Array literal
         if self.check(TokenType::LeftBracket) {
             let left_bracket = self.advance().clone();
+
+            // Is actually an empty struct expression in CF, "[:]" means empty struct
+            if self.check(TokenType::Colon) {
+                let colon_token = self.advance().clone();
+                let right_bracket = self
+                    .consume(TokenType::RightBracket, |token| {
+                        let labels = vec![
+                            LabeledSpan::at(left_bracket.span(), "For '[' here"),
+                            LabeledSpan::at(token.span(), "Expected closing ']' here"),
+                        ];
+                        miette!(
+                            labels = labels,
+                            help = "Empty struct expressions are defined like '[:]'",
+                            "Expected closing bracket ']'"
+                        )
+                    })?
+                    .clone();
+                return Ok(Expression::StructExpression(Rc::new(StructExpression {
+                    is_empty: true,
+                    left_brace: left_bracket,
+                    right_brace: right_bracket,
+                    elements: Vec::new(),
+                })));
+            }
+
             let mut elements = Vec::new();
             while !self.check(TokenType::RightBracket) {
                 let element_expr = self.expression()?;
@@ -1477,6 +1502,7 @@ impl<'ast> Parser<'ast> {
             }
             let right_brace = self.advance().clone();
             return Ok(Expression::StructExpression(Rc::new(StructExpression {
+                is_empty: false,
                 left_brace,
                 right_brace,
                 elements,
