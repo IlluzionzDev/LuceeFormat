@@ -2,16 +2,21 @@ use fusion_formatter::ast::AST;
 use fusion_formatter::formatter::{DocFormatter, Formatter};
 use fusion_formatter::parser::Parser;
 use fusion_formatter::visitor::Walkable;
+use miette::Report;
 
 /// Test helper for full formatting pipeline: lex -> parse -> format
 pub fn format_code(input: &str) -> String {
     // Parse into AST (parser internally handles lexing)
-    let mut parser = Parser::new(input);
+    let mut parser = Parser::new(input, "test");
     let ast = parser.parse();
+
+    if let Err(errs) = ast {
+        panic!("Parsing failed with errors: {:#?}", errs);
+    }
 
     // Format the AST using the visitor pattern
     let mut formatter = Formatter::new();
-    let doc = ast.walk(&mut formatter);
+    let doc = ast.unwrap().walk(&mut formatter);
 
     // Render the document
     let mut doc_formatter = DocFormatter::new(80, 4); // 80 char width, 4 space indent
@@ -19,8 +24,8 @@ pub fn format_code(input: &str) -> String {
 }
 
 /// Test helper for parsing only: lex -> parse -> return AST
-pub fn parse_code(input: &str) -> AST {
-    let mut parser = Parser::new(input);
+pub fn parse_code(input: &'_ str) -> miette::Result<AST<'_>, Vec<Report>> {
+    let mut parser = Parser::new(input, "test");
     parser.parse()
 }
 

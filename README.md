@@ -16,7 +16,7 @@ complex rules, and just runs through tokens in microseconds.
 - [X] Properly handle breaking lines while formatting
 -   [X] Determine inline-ness of comments when wrapping
 - [ ] When printing struct keys, if is string and has spaces, preserve quotes
-- [ ] Better error handling
+- [X] Better error handling - improve, show main block that requires token
 - [ ] Robust tests
 - [ ] (Future) Add linting capabilities
 
@@ -26,7 +26,6 @@ complex rules, and just runs through tokens in microseconds.
 - ^ Need a way for a Doc node to "force" it's group to break
 - Handle empty struct `[:]`
 - Ternary can contain assignment expressions
-- finally to try catch statement
 - Sometimes lucee functions (where space between arg name and value) join function name to first arg
 
 ## Backlog TODOS (Niceties but not critical)

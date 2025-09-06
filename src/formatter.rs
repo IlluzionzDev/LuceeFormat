@@ -1784,6 +1784,21 @@ impl Visitor<Doc> for Formatter {
             Some(&try_catch_statement.catch_right_brace),
             false, // catch blocks don't use compact formatting
         ));
+
+        if let Some(finally_token) = &try_catch_statement.finally_token {
+            docs.push(self.pop_comment(finally_token, true));
+            docs.push(Doc::Text(" finally ".to_string()));
+            docs.push(self.pop_trailing_comments(finally_token));
+
+            if let Some(finally_body) = &try_catch_statement.finally_body {
+                docs.push(self.format_statement_body(
+                    finally_body,
+                    try_catch_statement.finally_left_brace.as_ref(),
+                    try_catch_statement.finally_right_brace.as_ref(),
+                    false, // finally blocks don't use compact formatting
+                ));
+            }
+        }
         Doc::Group(docs)
     }
 }

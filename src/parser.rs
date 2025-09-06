@@ -1032,6 +1032,18 @@ impl<'ast> Parser<'ast> {
             .clone();
         let (catch_body, catch_left_brace, catch_right_brace) =
             self.consume_statement_block(false)?;
+
+        let finally_token = if self.check(TokenType::Finally) {
+            Some(self.advance().clone())
+        } else {
+            None
+        };
+        let (finally_body, finally_left_brace, finally_right_brace) = if finally_token.is_some() {
+            self.consume_statement_block(false)?
+        } else {
+            (vec![], None, None)
+        };
+
         Ok(Statement::TryCatchStatement(Rc::new(TryCatchStatement {
             try_token,
             try_body,
@@ -1046,6 +1058,10 @@ impl<'ast> Parser<'ast> {
             catch_body,
             catch_left_brace: catch_left_brace.unwrap(),
             catch_right_brace: catch_right_brace.unwrap(),
+            finally_token,
+            finally_body: Some(finally_body),
+            finally_left_brace,
+            finally_right_brace,
         })))
     }
 

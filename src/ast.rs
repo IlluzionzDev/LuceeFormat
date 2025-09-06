@@ -590,6 +590,10 @@ pub struct TryCatchStatement<'ast> {
     pub catch_body: Vec<Statement<'ast>>,
     pub catch_left_brace: Token<'ast>,
     pub catch_right_brace: Token<'ast>,
+    pub finally_token: Option<Token<'ast>>,
+    pub finally_body: Option<Vec<Statement<'ast>>>,
+    pub finally_left_brace: Option<Token<'ast>>,
+    pub finally_right_brace: Option<Token<'ast>>,
 }
 
 impl<'ast, T> Walkable<T> for TryCatchStatement<'ast> {
