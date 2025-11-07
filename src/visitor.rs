@@ -146,12 +146,11 @@ pub trait Visitor<T> {
     /// Default implementations here are for common nodes that need walking
     fn walk_statement(&mut self, statement: &Statement) -> T {
         match statement {
-            Statement::ExpressionStmt(expression_statement) => self.visit_expression_statement(expression_statement),
+            Statement::ExpressionStmt(expression_statement) => {
+                self.visit_expression_statement(expression_statement)
+            }
             Statement::VariableDeclaration(variable_declaration) => {
                 self.visit_variable_declaration(variable_declaration)
-            }
-            Statement::VariableAssignment(variable_assignment) => {
-                self.visit_variable_assignment(variable_assignment)
             }
             Statement::ReturnStatement(return_statement) => {
                 self.visit_return_statement(return_statement)
@@ -183,6 +182,9 @@ pub trait Visitor<T> {
             Expression::FunctionCall(function_call) => self.visit_function_call(function_call),
             Expression::ObjectCreation(object_creation) => {
                 self.visit_object_creation(object_creation)
+            }
+            Expression::VariableAssignment(variable_assignment) => {
+                self.visit_variable_assignment(variable_assignment)
             }
             Expression::ArrayExpression(array_expression) => {
                 self.visit_array_expression(array_expression)

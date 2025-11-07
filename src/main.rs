@@ -58,6 +58,17 @@ fn main() -> miette::Result<()> {
         process::exit(0);
     }
 
+    let output_path = if let Some(output_path) = &cli.output {
+        Some(PathBuf::from(output_path))
+    } else {
+        None
+    };
+    let output_path_opt = if let Some(output_path) = &output_path {
+        Some(output_path.as_path())
+    } else {
+        None
+    };
+
     // If path is a directory, list all files and collect into vec to process
     let files_to_process = if path.is_dir() {
         get_files_with_extension(&path, "cfc")
@@ -73,7 +84,11 @@ fn main() -> miette::Result<()> {
         if cli.write {
             // Format and write to each file, print diagnostics
             let format_start = std::time::Instant::now();
-            process_file(file_path, cli.max_line_length.unwrap_or(80))?;
+            process_file(
+                file_path,
+                cli.max_line_length.unwrap_or(80),
+                output_path_opt,
+            )?;
             let format_time = format_start.elapsed().as_micros();
             println!("Formatted {} in {}μs", file_path.display(), format_time);
         } else {
@@ -170,7 +185,11 @@ impl Diagnostic for Reports {
 }
 
 /// Process a single file through the formatting pipeline
-fn process_file(file_path: &Path, max_line_length: usize) -> miette::Result<()> {
+fn process_file(
+    file_path: &Path,
+    max_line_length: usize,
+    write_path: Option<&Path>,
+) -> miette::Result<()> {
     println!("Formatting: {}...", file_path.display());
 
     let start_total = std::time::Instant::now();
@@ -203,20 +222,24 @@ fn process_file(file_path: &Path, max_line_length: usize) -> miette::Result<()> 
 
         // Write back to file (using temporary file for safety)
         let write_start = std::time::Instant::now();
-        write_file_safely(file_path, &formatted_result);
+        if let Some(write_path) = write_path {
+            write_file_safely(write_path, &formatted_result);
+        } else {
+            write_file_safely(file_path, &formatted_result);
+        }
         let write_time = write_start.elapsed().as_micros();
 
         let total_time = start_total.elapsed().as_micros();
-    }
 
-    // Print timing information
-    // println!("  Read: {}μs", read_time);
-    // println!("  Lex: {}μs", lex_time);
-    // println!("  Parse: {}μs", parse_time);
-    // println!("  Doc Build: {}μs", doc_build_time);
-    // println!("  Render: {}μs", render_time);
-    // println!("  Write: {}μs", write_time);
-    // println!("  Total: {}μs", total_time);
+        // Print timing information
+        println!("  Read: {}μs", read_time);
+        println!("  Lex: {}μs", lex_time);
+        println!("  Parse: {}μs", parse_time);
+        println!("  Doc Build: {}μs", doc_build_time);
+        println!("  Render: {}μs", render_time);
+        println!("  Write: {}μs", write_time);
+        println!("  Total: {}μs", total_time);
+    }
 
     Ok(())
 }

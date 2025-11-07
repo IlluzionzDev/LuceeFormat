@@ -247,29 +247,6 @@ impl<'ast> Parser<'ast> {
         // Expression Statement
         let expression = self.expression()?;
 
-        // If assigning expression to something else
-        if self.check(TokenType::Equal) {
-            let equals_token = self
-                .consume(TokenType::Equal, |token| {
-                    let labels = vec![LabeledSpan::at(token.span(), "Expected '=' here")];
-
-                    miette!(labels = labels, "Expected '=' keyword")
-                })?
-                .clone();
-            let value = self.expression()?;
-            let semicolon_token = if self.check(TokenType::Semicolon) {
-                Some(self.advance().clone())
-            } else {
-                None
-            };
-            return Ok(Statement::VariableAssignment(Rc::new(VariableAssignment {
-                equals_token,
-                name: expression,
-                value,
-                semicolon_token,
-            })));
-        }
-
         match expression {
             Expression::None => {
                 self.error(miette!("Invalid expression"))?;
@@ -1093,6 +1070,31 @@ impl<'ast> Parser<'ast> {
                     token: op.clone(),
                 })),
             })));
+        }
+
+        // If assigning expression to something else
+        if self.check(TokenType::Equal) {
+            let equals_token = self
+                .consume(TokenType::Equal, |token| {
+                    let labels = vec![LabeledSpan::at(token.span(), "Expected '=' here")];
+
+                    miette!(labels = labels, "Expected '=' keyword")
+                })?
+                .clone();
+            let value = self.expression()?;
+            let semicolon_token = if self.check(TokenType::Semicolon) {
+                Some(self.advance().clone())
+            } else {
+                None
+            };
+            return Ok(Expression::VariableAssignment(Rc::new(
+                VariableAssignment {
+                    equals_token,
+                    name: expression,
+                    value,
+                    semicolon_token,
+                },
+            )));
         }
 
         Ok(expression)

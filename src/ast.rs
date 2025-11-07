@@ -24,7 +24,6 @@ impl<'ast, T> Walkable<T> for AST<'ast> {
 pub enum Statement<'ast> {
     ExpressionStmt(Rc<ExpressionStatement<'ast>>),
     VariableDeclaration(Rc<VariableDeclaration<'ast>>),
-    VariableAssignment(Rc<VariableAssignment<'ast>>),
     ReturnStatement(Rc<ReturnStatement<'ast>>),
     FunctionDefinition(Rc<FunctionDefinition<'ast>>),
     ComponentDefinition(Rc<ComponentDefinition<'ast>>),
@@ -118,6 +117,7 @@ pub enum Expression<'ast> {
     Identifier(Rc<Token<'ast>>),
     FunctionCall(Rc<FunctionCall<'ast>>),
     ObjectCreation(Rc<ObjectCreation<'ast>>),
+    VariableAssignment(Rc<VariableAssignment<'ast>>),
     ArrayExpression(Rc<ArrayExpression<'ast>>),
     StructExpression(Rc<StructExpression<'ast>>),
     LambdaExpression(Rc<LambdaExpression<'ast>>),
