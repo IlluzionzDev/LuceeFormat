@@ -1391,8 +1391,12 @@ impl Visitor<Doc> for Formatter {
         let mut name_group = Vec::with_capacity(4);
         name_group.push(Doc::Text(lucee_function.name.lexeme.to_string()));
         name_group.push(self.pop_trailing_comments(&lucee_function.name));
-        // TODO: If body or args, space, otherwise no space
-        name_group.push(Doc::BreakableSpace);
+
+        // If body or args, space, otherwise no space
+        let insert_space = lucee_function.attributes.len() > 0 || lucee_function.body.is_some();
+        if insert_space {
+            name_group.push(Doc::BreakableSpace);
+        }
 
         let mut param_docs = vec![];
         lucee_function.attributes.iter().for_each(|attribute| {
@@ -1405,7 +1409,9 @@ impl Visitor<Doc> for Formatter {
         });
         if !param_docs.is_empty() {
             param_docs.remove(param_docs.len() - 1); // Remove last line break
-            param_docs.push(Doc::Text(" ".to_string()));
+            if lucee_function.body.is_some() {
+                param_docs.push(Doc::Text(" ".to_string()));
+            }
         }
         name_group.push(Doc::Indent(Box::new(Doc::Group(param_docs))));
         docs.push(Doc::Group(name_group));
