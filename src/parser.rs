@@ -249,7 +249,8 @@ impl<'ast> Parser<'ast> {
 
         match expression {
             Expression::None => {
-                self.error(miette!("Invalid expression"))?;
+                let labels = vec![LabeledSpan::at(self.current.span(), "Here")];
+                self.error(miette!(labels = labels, "Invalid expression"))?;
             }
             _ => {}
         }
@@ -905,7 +906,11 @@ impl<'ast> Parser<'ast> {
             }
 
             if condition.is_empty() && !is_default {
-                self.error(miette!("Expected 'case' or 'default' keyword"))?;
+                let labels = vec![LabeledSpan::at(self.current.span(), "Here")];
+                self.error(miette!(
+                    labels = labels,
+                    "Expected 'case' or 'default' keyword"
+                ))?;
             }
 
             // Case body: We consume until break or return expression, since don't need {} to declare
@@ -914,6 +919,7 @@ impl<'ast> Parser<'ast> {
             while !self.check(TokenType::Break)
                 && !self.check(TokenType::Return)
                 && !self.check(TokenType::RightBrace)
+                && !self.check(TokenType::Case)
             {
                 body.push(self.statement()?);
             }

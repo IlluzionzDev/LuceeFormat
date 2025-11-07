@@ -24,6 +24,8 @@ complex rules, and just runs through tokens in microseconds.
 
 - Line breaks with '// comments' as "inline" comments should preserve line breaks
 - ^ Need a way for a Doc node to "force" it's group to break
+- In case statements, break doesn't need ';'
+- Handle 'does not contain' statement
 - Sometimes lucee functions (where space between arg name and value) join function name to first arg
 
 ## Backlog TODOS (Niceties but not critical)
