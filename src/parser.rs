@@ -249,6 +249,14 @@ impl<'ast> Parser<'ast> {
 
         match expression {
             Expression::None => {
+                // If followed by semicolon, is usually just an extra semicolon
+                if self.check(TokenType::Semicolon) {
+                    return Ok(Statement::ExpressionStmt(Rc::new(ExpressionStatement {
+                        expression,
+                        semicolon_token: Some(self.advance().clone()),
+                    })));
+                }
+
                 let labels = vec![LabeledSpan::at(self.current.span(), "Here")];
                 self.error(miette!(labels = labels, "Invalid expression"))?;
             }
