@@ -540,9 +540,10 @@ pub struct WhileStatement<'ast> {
     pub condition: Expression<'ast>,
     pub left_paren: Token<'ast>,
     pub right_paren: Token<'ast>,
-    pub body: Vec<Statement<'ast>>,
-    pub left_brace: Token<'ast>,
-    pub right_brace: Token<'ast>,
+    pub body: Option<Vec<Statement<'ast>>>,
+    pub left_brace: Option<Token<'ast>>,
+    pub right_brace: Option<Token<'ast>>,
+    pub semicolon_token: Option<Token<'ast>>,
 }
 
 impl<'ast, T> Walkable<T> for WhileStatement<'ast> {

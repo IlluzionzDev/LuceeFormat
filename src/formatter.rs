@@ -1614,18 +1614,35 @@ impl Visitor<Doc> for Formatter {
             )));
             while_docs.push(self.pop_comment(&while_statement.right_paren, true));
             while_docs.push(Doc::Line);
-            while_docs.push(Doc::Text(") ".to_string()));
+            while_docs.push(Doc::Text(")".to_string()));
+            if while_statement.left_brace.is_some() {
+                while_docs.push(Doc::Text(" ".to_string()));
+            }
             while_docs.push(self.pop_trailing_comments(&while_statement.right_paren));
             docs.push(Doc::Group(while_docs));
         }
 
-        let body_doc = self.format_statement_body(
-            &while_statement.body,
-            Some(&while_statement.left_brace),
-            Some(&while_statement.right_brace),
-            false, // while loops don't use compact formatting
-        );
-        docs.push(body_doc);
+        // Handle body - can be None for bodyless while statements
+        match &while_statement.body {
+            Some(body) => {
+                // Has a body with braces - use existing logic
+                let body_doc = self.format_statement_body(
+                    body,
+                    while_statement.left_brace.as_ref(),
+                    while_statement.right_brace.as_ref(),
+                    false, // while loops don't use compact formatting
+                );
+                docs.push(body_doc);
+            }
+            None => {
+                // No body - just render the semicolon with any comments
+                if let Some(semicolon) = &while_statement.semicolon_token {
+                    docs.push(self.pop_comment(semicolon, true));
+                    docs.push(Doc::Text(";".to_string()));
+                    docs.push(self.pop_trailing_comments(semicolon));
+                }
+            }
+        }
 
         if while_statement.do_while {
             docs.push(self.pop_comment(&while_statement.while_token, true));
@@ -1642,9 +1659,16 @@ impl Visitor<Doc> for Formatter {
             )));
             while_docs.push(self.pop_comment(&while_statement.right_paren, true));
             while_docs.push(Doc::Line);
-            while_docs.push(Doc::Text(") ".to_string()));
+            while_docs.push(Doc::Text(")".to_string()));
             while_docs.push(self.pop_trailing_comments(&while_statement.right_paren));
             docs.push(Doc::Group(while_docs));
+
+            // Add semicolon for do-while
+            if let Some(semicolon) = &while_statement.semicolon_token {
+                docs.push(self.pop_comment(semicolon, true));
+                docs.push(Doc::Text(";".to_string()));
+                docs.push(self.pop_trailing_comments(semicolon));
+            }
         }
         Doc::Group(docs)
     }

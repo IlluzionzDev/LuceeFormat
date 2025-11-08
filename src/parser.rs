@@ -781,6 +781,24 @@ impl<'ast> Parser<'ast> {
                 })?
                 .clone();
 
+            // Check if this is a bodyless while statement (just a semicolon)
+            if self.check(TokenType::Semicolon) {
+                let semicolon_token = Some(self.advance().clone());
+                return Ok(Statement::WhileStatement(Rc::new(WhileStatement {
+                    do_while: false,
+                    do_token: None,
+                    while_token,
+                    condition,
+                    left_paren,
+                    right_paren,
+                    body: None,
+                    left_brace: None,
+                    right_brace: None,
+                    semicolon_token,
+                })));
+            }
+
+            // Otherwise, consume a statement block with braces
             let (body, left_brace, right_brace) = self.consume_statement_block(false)?;
 
             return Ok(Statement::WhileStatement(Rc::new(WhileStatement {
@@ -790,9 +808,10 @@ impl<'ast> Parser<'ast> {
                 condition,
                 left_paren,
                 right_paren,
-                body,
-                left_brace: left_brace.unwrap(),
-                right_brace: right_brace.unwrap(),
+                body: Some(body),
+                left_brace,
+                right_brace,
+                semicolon_token: None,
             })));
         } else if self.check(TokenType::Do) {
             let do_token = Some(self.advance().clone());
@@ -821,6 +840,13 @@ impl<'ast> Parser<'ast> {
                 })?
                 .clone();
 
+            // Consume optional semicolon after do-while
+            let semicolon_token = if self.check(TokenType::Semicolon) {
+                Some(self.advance().clone())
+            } else {
+                None
+            };
+
             return Ok(Statement::WhileStatement(Rc::new(WhileStatement {
                 do_while: true,
                 do_token,
@@ -828,9 +854,10 @@ impl<'ast> Parser<'ast> {
                 condition,
                 left_paren,
                 right_paren,
-                body,
-                left_brace: left_brace.unwrap(),
-                right_brace: right_brace.unwrap(),
+                body: Some(body),
+                left_brace,
+                right_brace,
+                semicolon_token,
             })));
         }
 

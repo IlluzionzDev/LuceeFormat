@@ -101,8 +101,8 @@ statement_list> "}" )
 
 <loop_statement> ::= "for" "(" (<expression> ";" <expression> ";" <expression> | <identifier> "
 in" <expression>) ")" "{" <statement_list> "}"
-| "while" "(" <expression> ")" "{" <statement_list> "}"
-| "do" "{" <statement_list> "}" "while" "(" <expression> ")" ";"
+| "while" "(" <expression> ")" ( "{" <statement_list> "}" | ";" )
+| "do" "{" <statement_list> "}" "while" "(" <expression> ")" ";"?
 
 <switch_statement> ::= "switch" "(" <expression> ")" "{" <case_list> "}"
 

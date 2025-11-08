@@ -379,9 +379,11 @@ pub trait Visitor<T> {
     fn walk_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) -> T {
         let mut docs = Vec::new();
         docs.push(self.visit_expression(&while_statement.condition));
-        while_statement.body.iter().for_each(|statement| {
-            docs.push(self.visit_statement(statement));
-        });
+        if let Some(body) = &while_statement.body {
+            body.iter().for_each(|statement| {
+                docs.push(self.visit_statement(statement));
+            });
+        }
         self.combine_docs(&mut docs)
     }
     fn walk_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) -> T {
