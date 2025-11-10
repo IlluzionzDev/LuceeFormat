@@ -1319,8 +1319,32 @@ impl Visitor<Doc> for Formatter {
 
         arg_docs.push(self.pop_comment(&function_definition.right_paren, true));
         arg_docs.push(Doc::Line);
-        arg_docs.push(Doc::Text(") ".to_string()));
+        arg_docs.push(Doc::Text(")".to_string()));
+        if function_definition.attributes.is_empty() {
+            arg_docs.push(Doc::Text(" ".to_string()));
+        }
         arg_docs.push(self.pop_trailing_comments(&function_definition.right_paren));
+
+        let mut attributes_docs = vec![];
+        if !function_definition.attributes.is_empty() {
+            attributes_docs.push(Doc::BreakableSpace)
+        }
+        function_definition.attributes.iter().for_each(|attribute| {
+            attributes_docs.push(self.pop_comment(&attribute.0, true));
+            attributes_docs.push(Doc::Text(attribute.0.lexeme.to_string()));
+            attributes_docs.push(self.pop_trailing_comments(&attribute.0));
+            attributes_docs.push(Doc::Text("=".to_string()));
+            attributes_docs.push(self.visit_expression(&attribute.1));
+            attributes_docs.push(Doc::BreakableSpace);
+        });
+        if !attributes_docs.is_empty() {
+            attributes_docs.remove(attributes_docs.len() - 1); // Remove last line break
+            attributes_docs.push(Doc::Text(" ".to_string()));
+        }
+        if !attributes_docs.is_empty() {
+            arg_docs.push(Doc::Indent(Box::new(Doc::Group(attributes_docs))));
+        }
+
         docs.push(Doc::Group(arg_docs));
 
         docs.push(self.format_statement_body(

@@ -432,6 +432,8 @@ pub struct FunctionDefinition<'ast> {
     pub left_paren: Token<'ast>,
     pub parameters: Vec<(Parameter<'ast>, Option<Token<'ast>>)>,
     pub right_paren: Token<'ast>,
+    // Lucee style attributes after params before body
+    pub attributes: Vec<(Token<'ast>, Expression<'ast>)>,
     pub body: Vec<Statement<'ast>>,
     pub left_brace: Token<'ast>,
     pub right_brace: Token<'ast>,

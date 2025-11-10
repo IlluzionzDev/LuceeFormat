@@ -422,6 +422,10 @@ impl<'ast> Parser<'ast> {
                 miette!(labels = labels, "Expected ')'")
             })?
             .clone();
+
+        // Try consume attributes
+        let attributes = self.attribute_definitions()?;
+
         let (body, left_brace, right_brace) = self.consume_statement_block(false)?;
 
         let function_definition: FunctionDefinition = FunctionDefinition {
@@ -433,6 +437,7 @@ impl<'ast> Parser<'ast> {
             left_paren,
             parameters,
             right_paren,
+            attributes,
             body,
             left_brace: left_brace.unwrap(),
             right_brace: right_brace.unwrap(),
