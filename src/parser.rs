@@ -354,7 +354,8 @@ impl<'ast> Parser<'ast> {
         }
 
         if optional_braces {
-            if self.check(TokenType::RightBrace) {
+            // Only consume right brace if had left brace
+            if self.check(TokenType::RightBrace) && has_braces {
                 right_brace = Some(self.advance().clone());
             }
         } else {
@@ -711,7 +712,7 @@ impl<'ast> Parser<'ast> {
                     miette!(labels = labels, "Expected ')' keyword")
                 })?
                 .clone();
-            let (body, left_brace, right_brace) = self.consume_statement_block(false)?;
+            let (body, left_brace, right_brace) = self.consume_statement_block(true)?;
             Ok(Statement::ForStatement(Rc::new(ForStatement {
                 for_token,
                 left_paren,
@@ -723,8 +724,8 @@ impl<'ast> Parser<'ast> {
                     array: expression,
                 },
                 body,
-                left_brace: left_brace.unwrap(),
-                right_brace: right_brace.unwrap(),
+                left_brace,
+                right_brace,
             })))
         } else {
             let equals_token = self
@@ -750,7 +751,7 @@ impl<'ast> Parser<'ast> {
                     miette!(labels = labels, "Expected ')' keyword")
                 })?
                 .clone();
-            let (body, left_brace, right_brace) = self.consume_statement_block(false)?;
+            let (body, left_brace, right_brace) = self.consume_statement_block(true)?;
             Ok(Statement::ForStatement(Rc::new(ForStatement {
                 for_token,
                 left_paren,
@@ -764,8 +765,8 @@ impl<'ast> Parser<'ast> {
                     increment,
                 },
                 body,
-                left_brace: left_brace.unwrap(),
-                right_brace: right_brace.unwrap(),
+                left_brace,
+                right_brace,
             })))
         }
     }
@@ -806,8 +807,8 @@ impl<'ast> Parser<'ast> {
                 })));
             }
 
-            // Otherwise, consume a statement block with braces
-            let (body, left_brace, right_brace) = self.consume_statement_block(false)?;
+            // Otherwise, consume a statement block (braces optional for single statement)
+            let (body, left_brace, right_brace) = self.consume_statement_block(true)?;
 
             return Ok(Statement::WhileStatement(Rc::new(WhileStatement {
                 do_while: false,

@@ -186,6 +186,19 @@ impl Formatter {
         right_brace: Option<&Token>,
         allow_compact: bool,
     ) -> Doc {
+        // Handle braceless single-line bodies
+        if left_brace.is_none() {
+            let mut docs = vec![];
+            // docs.push(Doc::HardLine);
+            self.collapse_whitespace = true;
+
+            body.iter().for_each(|stmt| {
+                docs.push(Doc::Indent(Box::new(self.visit_statement(stmt))));
+            });
+
+            return Doc::Group(docs);
+        }
+
         let mut full_body_docs = vec![];
         // Add opening brace with comments
         if let Some(left_brace_token) = left_brace {
@@ -1573,8 +1586,8 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(self.format_statement_body(
             &for_statement.body,
-            Some(&for_statement.left_brace),
-            Some(&for_statement.right_brace),
+            for_statement.left_brace.as_ref(),
+            for_statement.right_brace.as_ref(),
             false, // for loops don't use compact formatting
         ));
 
@@ -1615,7 +1628,7 @@ impl Visitor<Doc> for Formatter {
             while_docs.push(self.pop_comment(&while_statement.right_paren, true));
             while_docs.push(Doc::Line);
             while_docs.push(Doc::Text(")".to_string()));
-            if while_statement.left_brace.is_some() {
+            if while_statement.body.is_some() {
                 while_docs.push(Doc::Text(" ".to_string()));
             }
             while_docs.push(self.pop_trailing_comments(&while_statement.right_paren));

@@ -100,8 +100,8 @@ statement_list> "}" )
 <else_clause> ::= "else" "{" <statement_list> "}" | ε
 
 <loop_statement> ::= "for" "(" (<expression> ";" <expression> ";" <expression> | <identifier> "
-in" <expression>) ")" "{" <statement_list> "}"
-| "while" "(" <expression> ")" ( "{" <statement_list> "}" | ";" )
+in" <expression>) ")" ( "{" <statement_list> "}" | <statement> )
+| "while" "(" <expression> ")" ( "{" <statement_list> "}" | <statement> | ";" )
 | "do" "{" <statement_list> "}" "while" "(" <expression> ")" ";"?
 
 <switch_statement> ::= "switch" "(" <expression> ")" "{" <case_list> "}"

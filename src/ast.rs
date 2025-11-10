@@ -503,8 +503,8 @@ pub struct ForStatement<'ast> {
     pub right_paren: Token<'ast>,
     pub control: ForControl<'ast>,
     pub body: Vec<Statement<'ast>>,
-    pub left_brace: Token<'ast>,
-    pub right_brace: Token<'ast>,
+    pub left_brace: Option<Token<'ast>>,
+    pub right_brace: Option<Token<'ast>>,
 }
 
 // Used to determine if For loop is traditional var i = 0, or for (i in array)
