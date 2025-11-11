@@ -19,6 +19,8 @@ pub enum Doc {
     Docs(Vec<Doc>), // Just a grouping that renders it's children, doesn't do anything else
     // Space that line breaks can freely happen between, represented by " " if doesn't break
     BreakableSpace,
+    // Forces the immediate parent group to break
+    ForceBreak,
     Nil, // Ignored
 }
 
@@ -31,6 +33,18 @@ impl Doc {
             Doc::Docs(docs) => docs.iter().map(|doc| doc.width()).sum(),
             Doc::BreakableSpace => 1,
             _ => 0,
+        }
+    }
+
+    /// Recursively checks if this Doc tree contains a ForceBreak node
+    pub fn contains_force_break(&self) -> bool {
+        match self {
+            Doc::ForceBreak => true,
+            Doc::Indent(doc) => doc.contains_force_break(),
+            Doc::Group(docs) | Doc::Docs(docs) => {
+                docs.iter().any(|doc| doc.contains_force_break())
+            }
+            _ => false,
         }
     }
 }
@@ -98,8 +112,10 @@ impl DocFormatter {
             }
             Doc::Group(docs) => {
                 let total_length: usize = docs.iter().map(|d| d.width()).sum();
+                let has_force_break = docs.iter().any(|d| d.contains_force_break());
 
-                if total_length > self.max_width {
+                // Force breaking if width exceeds max OR if contains ForceBreak
+                if total_length > self.max_width || has_force_break {
                     for doc in docs {
                         self.write_doc(doc, false);
                     }
@@ -120,7 +136,7 @@ impl DocFormatter {
                     self.current_line_length += 1;
                 }
             }
-            Doc::Nil => {}
+            Doc::Nil | Doc::ForceBreak => {}
         }
     }
 }
@@ -321,7 +337,8 @@ impl Formatter {
                         docs.push(Doc::Text(" ".to_string()));
                         let formatted_comment = self.format_comment(&comment.token.lexeme);
                         docs.push(Doc::Text(formatted_comment.trim_end().to_string()));
-                        // Don't add line break for trailing comments - they stay on the same line
+                        // Trailing comments must force line breaks - they can't be inline
+                        docs.push(Doc::ForceBreak);
                     }
                     _ => {} // Only handle trailing comments here
                 }
