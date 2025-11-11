@@ -570,7 +570,10 @@ impl<'a> Lexer<'a> {
         }
 
         let text = &self.source[self.start..self.current];
-        let token_type = KEYWORDS.get(text).copied().unwrap_or(TokenType::Identifier);
+        let token_type = KEYWORDS
+            .get(&*str::to_lowercase(text))
+            .copied()
+            .unwrap_or(TokenType::Identifier);
 
         self.add_token(token_type)
     }

@@ -33,7 +33,7 @@ struct Cli {
     #[arg(
         alias = "max-length",
         value_name = "max-length",
-        visible_aliases = &["max_length"],
+        visible_aliases = &["max-length"],
         short,
         long,
         help = "Set maximum line length for formatting",
@@ -43,7 +43,7 @@ struct Cli {
 
     #[arg(
         long,
-        help = "Optional file to output formatted content to (Instead of overwriting original file)"
+        help = "Optional file to output formatted content to (Instead of overwriting original file). Only works if formatting single file"
     )]
     output: Option<String>,
 }

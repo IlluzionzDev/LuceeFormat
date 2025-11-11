@@ -12,13 +12,19 @@ complex rules, and just runs through tokens in microseconds.
 
 # Dev TODO
 
-- [X] Preserve comments/whitespace in AST
-- [X] Properly handle breaking lines while formatting
--   [X] Determine inline-ness of comments when wrapping
+- [ ] CLI Tasks
+    - Still check / format files if some fail to parse
+    - Multithread checking / formatting
+    - Nicely present failing files at end of checking / formatting
 - [ ] When printing struct keys, if is string and has spaces, preserve quotes
 - [X] Better error handling - improve, show main block that requires token
+- [ ] Handle CFScript, as well as CFScript in CFM files :/
 - [ ] Robust tests
 - [ ] (Future) Add linting capabilities
+
+# Debugging TODOs
+
+- [ ] AST Validator: Check the the newly formatted code parses the same AST.
 
 ## Breaking TODOS (Need to be done before production code formatter)
 
