@@ -41,9 +41,7 @@ impl Doc {
         match self {
             Doc::ForceBreak => true,
             Doc::Indent(doc) => doc.contains_force_break(),
-            Doc::Group(docs) | Doc::Docs(docs) => {
-                docs.iter().any(|doc| doc.contains_force_break())
-            }
+            Doc::Group(docs) | Doc::Docs(docs) => docs.iter().any(|doc| doc.contains_force_break()),
             _ => false,
         }
     }
@@ -352,6 +350,41 @@ impl Formatter {
         }
     }
 
+    fn pop_trailing_comments_break(&mut self, token: &Token) -> Doc {
+        let mut docs = vec![];
+
+        if let Some(trailing_comments) = &token.trailing_comments {
+            for comment in trailing_comments {
+                // println!(
+                //     "[Formatter] Trailing comment: {0:?} for token {1:?}",
+                //     comment.token.lexeme, token
+                // );
+                match comment.comment_type {
+                    CommentType::Trailing => {
+                        // Add space before trailing comment
+                        docs.push(Doc::Text(" ".to_string()));
+                        let formatted_comment = self.format_comment(&comment.token.lexeme);
+                        docs.push(Doc::Text(formatted_comment.trim_end().to_string()));
+
+                        // We also break after this comment, usually because we are in between tokens that don't normally break
+                        if formatted_comment.starts_with("//") {
+                            docs.push(Doc::Line);
+                        }
+                        // Trailing comments must force line breaks - they can't be inline
+                        docs.push(Doc::ForceBreak);
+                    }
+                    _ => {} // Only handle trailing comments here
+                }
+            }
+        }
+
+        if docs.is_empty() {
+            Doc::Nil
+        } else {
+            Doc::Group(docs)
+        }
+    }
+
     /// Formats / pops comment on this token. Handles formatting indents, by stripping out newlines
     /// extra_indent flag for closing comments to maintain indent
     fn _pop_comment(&mut self, token: &Token, inline: bool, extra_indent: bool) -> Doc {
@@ -395,6 +428,11 @@ impl Formatter {
 
                             if !(extra_indent && is_last_line_of_comment && is_last_comment) {
                                 docs.push(Doc::HardLine);
+                            }
+
+                            // Closing comment
+                            if (extra_indent) {
+                                docs.push(Doc::ForceBreak);
                             }
                         }
                     }
@@ -883,7 +921,10 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(Doc::Text("{".to_string()));
         docs.push(self.pop_trailing_comments(&struct_expression.left_brace));
-        docs.push(Doc::BreakableSpace);
+
+        if !struct_expression.elements.is_empty() {
+            docs.push(Doc::BreakableSpace);
+        }
 
         let mut it = struct_expression.elements.iter().peekable();
 
@@ -920,7 +961,10 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
 
-        docs.push(Doc::BreakableSpace);
+        if !struct_expression.elements.is_empty() {
+            docs.push(Doc::BreakableSpace);
+        }
+
         docs.push(Doc::Text("}".to_string()));
         docs.push(self.pop_trailing_comments(&struct_expression.right_brace));
 
@@ -1530,9 +1574,9 @@ impl Visitor<Doc> for Formatter {
                             self.pop_comment(&if_statement.else_token.clone().unwrap(), true),
                         );
                         docs.push(Doc::Text(" else ".to_string()));
-                        docs.push(
-                            self.pop_trailing_comments(&if_statement.else_token.clone().unwrap()),
-                        );
+                        docs.push(self.pop_trailing_comments_break(
+                            &if_statement.else_token.clone().unwrap(),
+                        ));
                         docs.push(self.visit_if_statement(if_state));
                     }
                     _ => {
@@ -1540,9 +1584,9 @@ impl Visitor<Doc> for Formatter {
                             self.pop_comment(&if_statement.else_token.clone().unwrap(), true),
                         );
                         docs.push(Doc::Text(" else ".to_string()));
-                        docs.push(
-                            self.pop_trailing_comments(&if_statement.else_token.clone().unwrap()),
-                        );
+                        docs.push(self.pop_trailing_comments_break(
+                            &if_statement.else_token.clone().unwrap(),
+                        ));
                         docs.push(self.format_statement_body(
                             else_body,
                             if_statement.else_left_brace.as_ref(),
