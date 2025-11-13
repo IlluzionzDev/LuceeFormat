@@ -80,35 +80,52 @@ fn main() -> miette::Result<()> {
         vec![path]
     };
 
+    let mut errors: Reports = Reports::from(Vec::new());
     for file_path in &files_to_process {
         if cli.write {
             // Format and write to each file, print diagnostics
             let format_start = std::time::Instant::now();
-            process_file(
+            if let Err(e) = process_file(
                 file_path,
                 cli.max_line_length.unwrap_or(80),
                 output_path_opt,
-            )?;
+            ) {
+                errors.reports.push(e);
+                continue;
+            }
             let format_time = format_start.elapsed().as_micros();
             println!("Formatted {} in {}μs", file_path.display(), format_time);
         } else {
             // Compare file content with formatted content and see if matches
             let format_start = std::time::Instant::now();
             let source = std::fs::read_to_string(file_path).unwrap();
+
             let formatted_source = format_content(
                 &source,
                 file_path.to_str().unwrap(),
                 cli.max_line_length.unwrap_or(80),
-            )?;
+            );
+            match formatted_source {
+                Ok(formatted_source) => {
+                    if formatted_source == source {
+                        println!("File {} is already formatted.", file_path.display());
+                    } else {
+                        println!("File {} needs formatting.", file_path.display());
+                    }
+                }
+                Err(e) => errors.reports.push(e),
+            }
+
             let format_time = format_start.elapsed().as_micros();
             println!("Checked {} in {}μs", file_path.display(), format_time);
-
-            if formatted_source == source {
-                println!("File {} is already formatted.", file_path.display());
-            } else {
-                println!("File {} needs formatting.", file_path.display());
-            }
         }
+    }
+
+    if errors.reports.len() > 0 {
+        errors
+            .reports
+            .into_iter()
+            .for_each(|e| eprintln!("{:?}", e));
     }
 
     Ok(())
@@ -161,7 +178,7 @@ impl Display for Reports {
 
 impl Diagnostic for Reports {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
-        Some(Box::new("failure"))
+        Some(Box::new("Error occurred while formatting file(s)"))
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {

@@ -554,12 +554,9 @@ impl<'a> Lexer<'a> {
                     self.pop_lines += 1;
                     continue;
                 }
-                _ => panic!(
-                    "Unexpected character {0} at {1}:{2}",
-                    self.source[self.start..self.current].to_string(),
-                    self.line,
-                    self.column
-                ),
+                // Don't know this character, oh well keep going ?
+                // Should really display useful error
+                _ => continue,
             };
         }
     }

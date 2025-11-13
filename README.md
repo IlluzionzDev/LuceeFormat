@@ -13,11 +13,13 @@ complex rules, and just runs through tokens in microseconds.
 # Dev TODO
 
 - [ ] CLI Tasks
-    - Still check / format files if some fail to parse
+    - [X] Still check / format files if some fail to parse
     - Multithread checking / formatting
-    - Nicely present failing files at end of checking / formatting
+    - [X] Nicely present failing files at end of checking / formatting
 - [ ] When printing struct keys, if is string and has spaces, preserve quotes
 - [X] Better error handling - improve, show main block that requires token
+- [ ] Passing named args to function doesn't require commas ??
+- [ ] Lucee function, allow name only args (without value)
 - [ ] Handle CFScript, as well as CFScript in CFM files :/
 - [ ] Robust tests
 - [ ] (Future) Add linting capabilities
