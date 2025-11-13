@@ -1,7 +1,9 @@
-# ColdFusion Formatter
+# LuceeFormat
 
 This is a ColdFusion formatter (based of the Lucee dialect) for formatting and linting cfc code. This mainly works
-with .cfc (Cold Fusion Component) files. This was not designed to work with .cfm files as that is deemed legacy.
+with .cfc (Cold Fusion Component) files.
+
+This project is still in early beta, not recommended to be used in production yet.
 
 The project is coded in Rust for maximum performance.
 
@@ -14,7 +16,7 @@ complex rules, and just runs through tokens in microseconds.
 
 - [ ] CLI Tasks
     - [X] Still check / format files if some fail to parse
-    - Multithread checking / formatting
+    - [X] Multithread checking / formatting
     - [X] Nicely present failing files at end of checking / formatting
 - [ ] When printing struct keys, if is string and has spaces, preserve quotes
 - [X] Better error handling - improve, show main block that requires token
@@ -30,12 +32,9 @@ complex rules, and just runs through tokens in microseconds.
 
 ## Breaking TODOS (Need to be done before production code formatter)
 
-- Line breaks with '// comments' as "inline" comments should preserve line breaks
-- ^ Need a way for a Doc node to "force" it's group to break
 - In case statements, break doesn't need ';'
 - Handle 'does not contain' statement
-- Sometimes lucee functions (where space between arg name and value) join function name to first arg
 
 ## Backlog TODOS (Niceties but not critical)
 
-- Arena allocator for AST nodes
+- Arena allocator for AST nodes / Zero Copy AST

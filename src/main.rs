@@ -39,7 +39,7 @@ struct Cli {
         short,
         long,
         help = "Set maximum line length for formatting",
-        default_value = "80"
+        default_value = "120"
     )]
     max_line_length: Option<usize>,
 
