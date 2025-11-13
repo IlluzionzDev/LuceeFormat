@@ -4,10 +4,12 @@ use crate::formatter::{DocFormatter, Formatter};
 use crate::visitor::{Visitor, Walkable};
 use clap::Parser;
 use miette::{Diagnostic, LabeledSpan, Report, SourceCode};
+use rayon::prelude::*;
 use std::cmp::PartialEq;
 use std::error::Error;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::{fs, process};
 
 mod ast;
@@ -80,24 +82,29 @@ fn main() -> miette::Result<()> {
         vec![path]
     };
 
-    let mut errors: Reports = Reports::from(Vec::new());
-    for file_path in &files_to_process {
+    // Thread-safe error collection
+    let errors = Arc::new(Mutex::new(Vec::new()));
+
+    // Start timing the entire processing
+    let total_start = std::time::Instant::now();
+
+    // Process files in parallel using rayon
+    files_to_process.par_iter().for_each(|file_path| {
         if cli.write {
             // Format and write to each file, print diagnostics
-            let format_start = std::time::Instant::now();
+            // let format_start = std::time::Instant::now();
             if let Err(e) = process_file(
                 file_path,
                 cli.max_line_length.unwrap_or(80),
                 output_path_opt,
             ) {
-                errors.reports.push(e);
-                continue;
+                errors.lock().unwrap().push(e);
             }
-            let format_time = format_start.elapsed().as_micros();
-            println!("Formatted {} in {}μs", file_path.display(), format_time);
+            // let format_time = format_start.elapsed().as_micros();
+            // println!("Formatted {} in {}μs", file_path.display(), format_time);
         } else {
             // Compare file content with formatted content and see if matches
-            let format_start = std::time::Instant::now();
+            // let format_start = std::time::Instant::now();
             let source = std::fs::read_to_string(file_path).unwrap();
 
             let formatted_source = format_content(
@@ -107,26 +114,42 @@ fn main() -> miette::Result<()> {
             );
             match formatted_source {
                 Ok(formatted_source) => {
+                    // TODO: Report as error that needs formatting
                     if formatted_source == source {
-                        println!("File {} is already formatted.", file_path.display());
+                        // println!("File {} is already formatted.", file_path.display());
                     } else {
                         println!("File {} needs formatting.", file_path.display());
                     }
                 }
-                Err(e) => errors.reports.push(e),
+                Err(e) => errors.lock().unwrap().push(e),
             }
 
-            let format_time = format_start.elapsed().as_micros();
-            println!("Checked {} in {}μs", file_path.display(), format_time);
+            // let format_time = format_start.elapsed().as_micros();
+            // println!("Checked {} in {}μs", file_path.display(), format_time);
         }
-    }
+    });
 
-    if errors.reports.len() > 0 {
+    // Calculate total time
+    let total_time = total_start.elapsed().as_millis();
+
+    // Extract errors from Arc<Mutex<>> after parallel processing
+    let error_reports = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
+    if error_reports.len() > 0 {
+        let errors = Reports::from(error_reports);
         errors
             .reports
             .into_iter()
             .for_each(|e| eprintln!("{:?}", e));
     }
+
+    // Print summary
+    let action = if cli.write { "Formatted" } else { "Checked" };
+    let file_count = files_to_process.len();
+    let file_word = if file_count == 1 { "file" } else { "files" };
+    println!(
+        "\n{} {} {} in {}ms",
+        action, file_count, file_word, total_time
+    );
 
     Ok(())
 }
@@ -249,13 +272,14 @@ fn process_file(
         let total_time = start_total.elapsed().as_micros();
 
         // Print timing information
-        println!("  Read: {}μs", read_time);
-        println!("  Lex: {}μs", lex_time);
-        println!("  Parse: {}μs", parse_time);
-        println!("  Doc Build: {}μs", doc_build_time);
-        println!("  Render: {}μs", render_time);
-        println!("  Write: {}μs", write_time);
-        println!("  Total: {}μs", total_time);
+        // TODO: Put behind debug flag
+        // println!("  Read: {}μs", read_time);
+        // println!("  Lex: {}μs", lex_time);
+        // println!("  Parse: {}μs", parse_time);
+        // println!("  Doc Build: {}μs", doc_build_time);
+        // println!("  Render: {}μs", render_time);
+        // println!("  Write: {}μs", write_time);
+        // println!("  Total: {}μs", total_time);
     }
 
     Ok(())
