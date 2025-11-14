@@ -33,11 +33,11 @@ pub struct Parser<'ast> {
 * that it is correct
 */
 impl<'ast> Parser<'ast> {
-    pub fn new(source: &'ast str, file_name: &'ast str) -> Parser<'ast> {
-        let mut lexer = Lexer::new(source);
-        let current = lexer.scan_token();
-        let ahead = lexer.scan_token();
-        Parser {
+    pub fn new(source: &'ast str, file_name: &'ast str) -> miette::Result<Parser<'ast>> {
+        let mut lexer = Lexer::new(source, file_name);
+        let current = lexer.scan_token()?;
+        let ahead = lexer.scan_token()?;
+        Ok(Parser {
             lexer,
             current,
             ahead,
@@ -54,7 +54,7 @@ impl<'ast> Parser<'ast> {
             },
             named_source: NamedSource::new(file_name, source.to_string()),
             lex_time: 0,
-        }
+        })
     }
 
     fn check(&self, token_type: TokenType) -> bool {
@@ -65,11 +65,11 @@ impl<'ast> Parser<'ast> {
         !self.is_at_end() && self.peek_next().token_type == token_type
     }
 
-    fn advance(&mut self) -> &Token<'ast> {
+    fn advance(&mut self) -> miette::Result<&Token<'ast>> {
         self.behind = std::mem::replace(&mut self.current, self.ahead.clone());
         if !self.is_at_end() {
             let start = std::time::Instant::now();
-            self.ahead = self.lexer.scan_token();
+            self.ahead = self.lexer.scan_token()?;
             self.lex_time += start.elapsed().as_micros();
         }
 
@@ -79,7 +79,7 @@ impl<'ast> Parser<'ast> {
             self.ahead.trailing_comments = None;
         }
 
-        &self.behind
+        Ok(&self.behind)
     }
 
     // Check next token is token_type, and if so advance.
@@ -101,7 +101,7 @@ impl<'ast> Parser<'ast> {
         report: impl FnOnce(&Token) -> Report,
     ) -> miette::Result<&Token<'ast>> {
         if self.check(token_type) {
-            return Ok(self.advance());
+            return self.advance();
         }
 
         Err(report(self.peek()).with_source_code(self.named_source.clone()))
@@ -186,7 +186,7 @@ impl<'ast> Parser<'ast> {
                 .clone();
             let expression = self.expression()?;
             let semicolon_token = if self.check(TokenType::Semicolon) {
-                Some(self.advance().clone())
+                Some(self.advance()?.clone())
             } else {
                 None
             };
@@ -253,7 +253,7 @@ impl<'ast> Parser<'ast> {
                 if self.check(TokenType::Semicolon) {
                     return Ok(Statement::ExpressionStmt(Rc::new(ExpressionStatement {
                         expression,
-                        semicolon_token: Some(self.advance().clone()),
+                        semicolon_token: Some(self.advance()?.clone()),
                     })));
                 }
 
@@ -264,7 +264,7 @@ impl<'ast> Parser<'ast> {
         }
 
         let semicolon_token = if self.check(TokenType::Semicolon) {
-            Some(self.advance().clone())
+            Some(self.advance()?.clone())
         } else {
             None
         };
@@ -296,7 +296,7 @@ impl<'ast> Parser<'ast> {
             .clone();
         let value = self.expression()?;
         let semicolon_token = if self.check(TokenType::Semicolon) {
-            Some(self.advance().clone())
+            Some(self.advance()?.clone())
         } else {
             None
         };
@@ -331,7 +331,7 @@ impl<'ast> Parser<'ast> {
         if optional_braces {
             has_braces = self.check(TokenType::LeftBrace);
             if has_braces {
-                left_brace = Some(self.advance().clone());
+                left_brace = Some(self.advance()?.clone());
             }
         } else {
             has_braces = true;
@@ -356,7 +356,7 @@ impl<'ast> Parser<'ast> {
         if optional_braces {
             // Only consume right brace if had left brace
             if self.check(TokenType::RightBrace) && has_braces {
-                right_brace = Some(self.advance().clone());
+                right_brace = Some(self.advance()?.clone());
             }
         } else {
             right_brace = Some(
@@ -380,12 +380,12 @@ impl<'ast> Parser<'ast> {
         };
         let mut access_modifier_token = None;
         if access_modifier.is_some() {
-            access_modifier_token = Some(self.advance().clone());
+            access_modifier_token = Some(self.advance()?.clone());
         }
 
         let mut return_type = None;
         if self.check(TokenType::Identifier) {
-            return_type = Some(self.advance().clone());
+            return_type = Some(self.advance()?.clone());
         }
 
         let function_token = self
@@ -452,7 +452,7 @@ impl<'ast> Parser<'ast> {
 
         let first_param = self.parameter()?;
         let comma_token = if self.check(TokenType::Comma) {
-            Some(self.advance().clone())
+            Some(self.advance()?.clone())
         } else {
             None
         };
@@ -462,7 +462,7 @@ impl<'ast> Parser<'ast> {
         while has_comma && !self.check(TokenType::RightParen) {
             let param = self.parameter()?;
             let comma_token = if self.check(TokenType::Comma) {
-                Some(self.advance().clone())
+                Some(self.advance()?.clone())
             } else {
                 None
             };
@@ -480,7 +480,7 @@ impl<'ast> Parser<'ast> {
     fn parameter(&mut self) -> miette::Result<Parameter<'ast>> {
         let mut required = None;
         if self.check(TokenType::Required) {
-            required = Some(self.advance().clone());
+            required = Some(self.advance()?.clone());
         }
 
         // Defining return type
@@ -511,7 +511,7 @@ impl<'ast> Parser<'ast> {
         let mut default_value = None;
         let mut default_value_token = None;
         if self.check(TokenType::Equal) {
-            default_value_token = Some(self.advance().clone());
+            default_value_token = Some(self.advance()?.clone());
             default_value = Some(self.expression()?);
             if default_value.is_none() {
                 self.error(miette!("Expected default value"))?;
@@ -557,7 +557,7 @@ impl<'ast> Parser<'ast> {
         }
 
         let semicolon_token = if self.check(TokenType::Semicolon) {
-            Some(self.advance().clone())
+            Some(self.advance()?.clone())
         } else {
             None
         };
@@ -602,7 +602,7 @@ impl<'ast> Parser<'ast> {
         let mut attributes = Vec::new();
 
         while self.check(TokenType::Identifier) {
-            let name = self.advance().clone();
+            let name = self.advance()?.clone();
             self.consume(TokenType::Equal, |token| {
                 let labels = vec![LabeledSpan::at(token.span(), "Expected '=' here")];
                 miette!(labels = labels, "Expected assignment operator '='")
@@ -644,7 +644,7 @@ impl<'ast> Parser<'ast> {
         let mut else_left_brace = None;
         let mut else_right_brace = None;
         if self.check(TokenType::Else) {
-            else_token = Some(self.advance().clone());
+            else_token = Some(self.advance()?.clone());
             if self.check(TokenType::If) {
                 // Else body is another IF statement
                 else_body = Some(vec![self.if_statement()?]);
@@ -692,7 +692,7 @@ impl<'ast> Parser<'ast> {
         // Check optional "var" keyword
         let mut var_token = None;
         if self.check(TokenType::Var) {
-            var_token = Some(self.advance().clone());
+            var_token = Some(self.advance()?.clone());
         }
 
         // Consume identifier, if next keyword is in, is a for in loop
@@ -778,7 +778,7 @@ impl<'ast> Parser<'ast> {
 
     fn while_statement(&mut self) -> miette::Result<Statement<'ast>> {
         if self.check(TokenType::While) {
-            let while_token = self.advance().clone();
+            let while_token = self.advance()?.clone();
             let left_paren = self
                 .consume(TokenType::LeftParen, |token| {
                     let labels = vec![LabeledSpan::at(token.span(), "Expected '(' here")];
@@ -797,7 +797,7 @@ impl<'ast> Parser<'ast> {
 
             // Check if this is a bodyless while statement (just a semicolon)
             if self.check(TokenType::Semicolon) {
-                let semicolon_token = Some(self.advance().clone());
+                let semicolon_token = Some(self.advance()?.clone());
                 return Ok(Statement::WhileStatement(Rc::new(WhileStatement {
                     do_while: false,
                     do_token: None,
@@ -828,7 +828,7 @@ impl<'ast> Parser<'ast> {
                 semicolon_token: None,
             })));
         } else if self.check(TokenType::Do) {
-            let do_token = Some(self.advance().clone());
+            let do_token = Some(self.advance()?.clone());
             let (body, left_brace, right_brace) = self.consume_statement_block(false)?;
 
             let while_token = self
@@ -856,7 +856,7 @@ impl<'ast> Parser<'ast> {
 
             // Consume optional semicolon after do-while
             let semicolon_token = if self.check(TokenType::Semicolon) {
-                Some(self.advance().clone())
+                Some(self.advance()?.clone())
             } else {
                 None
             };
@@ -915,7 +915,7 @@ impl<'ast> Parser<'ast> {
 
             // Consume multiple case statements
             while self.check(TokenType::Case) {
-                let case_token = self.advance().clone();
+                let case_token = self.advance()?.clone();
                 let cond_expr = self.expression()?;
                 let colon = self
                     .consume(TokenType::Colon, |token| {
@@ -934,7 +934,7 @@ impl<'ast> Parser<'ast> {
                         "Cannot mix 'case' and 'default' in a switch statement"
                     ))?;
                 }
-                let default_token = self.advance().clone();
+                let default_token = self.advance()?.clone();
 
                 is_default = true;
                 let colon = self
@@ -967,7 +967,7 @@ impl<'ast> Parser<'ast> {
 
             // Parse last break / return statement, optional as can be empty case
             if self.check(TokenType::Break) {
-                let break_statement = self.advance().clone();
+                let break_statement = self.advance()?.clone();
                 let semicolon_token = self
                     .consume(TokenType::Semicolon, |token| {
                         let labels = vec![LabeledSpan::at(token.span(), "Expected ';' here")];
@@ -1034,7 +1034,7 @@ impl<'ast> Parser<'ast> {
             .clone();
         let mut catch_var_token = None;
         if self.check(TokenType::Var) {
-            catch_var_token = Some(self.advance().clone());
+            catch_var_token = Some(self.advance()?.clone());
         }
         let mut catch_var_type = None;
         if self.check(TokenType::Identifier)
@@ -1058,7 +1058,7 @@ impl<'ast> Parser<'ast> {
             self.consume_statement_block(false)?;
 
         let finally_token = if self.check(TokenType::Finally) {
-            Some(self.advance().clone())
+            Some(self.advance()?.clone())
         } else {
             None
         };
@@ -1108,7 +1108,7 @@ impl<'ast> Parser<'ast> {
         // Shorthand increments, ++ or --
         // For our AST we will store as normally binary expression of x += 1. Later optimized when formatting/parsing
         if self.check(TokenType::PlusPlus) || self.check(TokenType::MinusMinus) {
-            let op = self.advance().clone();
+            let op = self.advance()?.clone();
             return Ok(Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
                 op: op.clone(),
@@ -1130,7 +1130,7 @@ impl<'ast> Parser<'ast> {
                 .clone();
             let value = self.expression()?;
             let semicolon_token = if self.check(TokenType::Semicolon) {
-                Some(self.advance().clone())
+                Some(self.advance()?.clone())
             } else {
                 None
             };
@@ -1151,7 +1151,7 @@ impl<'ast> Parser<'ast> {
         let mut expression = self.equality()?;
 
         if self.check(TokenType::Question) {
-            let question_token = self.advance().clone();
+            let question_token = self.advance()?.clone();
             let true_expr = self.expression()?;
             let colon_token = self
                 .consume(TokenType::Colon, |token| {
@@ -1180,7 +1180,7 @@ impl<'ast> Parser<'ast> {
             || self.check(TokenType::Eq)
             || self.check(TokenType::Neq)
         {
-            let op = self.advance().clone();
+            let op = self.advance()?.clone();
             let right = self.comparison()?;
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
@@ -1208,7 +1208,7 @@ impl<'ast> Parser<'ast> {
             || self.check(TokenType::Contains)
             || self.check(TokenType::Xor)
         {
-            let op = self.advance().clone();
+            let op = self.advance()?.clone();
             let right = self.term()?;
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
@@ -1230,7 +1230,7 @@ impl<'ast> Parser<'ast> {
             || self.check(TokenType::MinusEqual)
             || self.check(TokenType::AmpersandEqual)
         {
-            let op = self.advance().clone();
+            let op = self.advance()?.clone();
             let right = self.factor()?;
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
@@ -1250,7 +1250,7 @@ impl<'ast> Parser<'ast> {
             || self.check(TokenType::StarEqual)
             || self.check(TokenType::SlashEqual)
         {
-            let op = self.advance().clone();
+            let op = self.advance()?.clone();
             let right = self.unary()?;
             expression = Expression::BinaryExpression(Rc::new(BinaryExpression {
                 left: expression,
@@ -1265,7 +1265,7 @@ impl<'ast> Parser<'ast> {
     fn unary(&mut self) -> miette::Result<Expression<'ast>> {
         // Unary operator - or !
         if self.check(TokenType::Minus) || self.check(TokenType::Bang) {
-            let op = self.advance().clone();
+            let op = self.advance()?.clone();
             let right = self.dot_access()?;
             return Ok(Expression::UnaryExpression(Rc::new(UnaryExpression {
                 op,
@@ -1280,7 +1280,7 @@ impl<'ast> Parser<'ast> {
         let mut expression = self.index_access()?;
 
         while self.check(TokenType::Dot) {
-            let dot_token = self.advance().clone();
+            let dot_token = self.advance()?.clone();
             let property = self.index_access()?;
             expression = Expression::MemberAccess(Rc::new(MemberAccess {
                 object: expression,
@@ -1296,7 +1296,7 @@ impl<'ast> Parser<'ast> {
         let mut expression = self.primary()?;
 
         while self.check(TokenType::LeftBracket) {
-            let left_bracket = self.advance().clone();
+            let left_bracket = self.advance()?.clone();
             let index = self.expression()?;
             let right_bracket = self
                 .consume(TokenType::RightBracket, |token| {
@@ -1318,7 +1318,7 @@ impl<'ast> Parser<'ast> {
     fn primary(&mut self) -> miette::Result<Expression<'ast>> {
         // Literals
         if self.check(TokenType::String) {
-            let token = self.advance().clone();
+            let token = self.advance()?.clone();
             let value: String = String::from(token.lexeme);
 
             // Detect if is double quote based on first char of value
@@ -1336,7 +1336,7 @@ impl<'ast> Parser<'ast> {
         }
 
         if self.check(TokenType::Number) {
-            let token = self.advance().clone();
+            let token = self.advance()?.clone();
             let value: f64 = token.lexeme.parse().unwrap();
             return Ok(ExpLiteral(Rc::new(Literal {
                 token,
@@ -1346,21 +1346,21 @@ impl<'ast> Parser<'ast> {
 
         if self.check(TokenType::True) {
             return Ok(ExpLiteral(Rc::new(Literal {
-                token: self.advance().clone(),
+                token: self.advance()?.clone(),
                 value: LiteralValue::Boolean(true),
             })));
         }
 
         if self.check(TokenType::False) {
             return Ok(ExpLiteral(Rc::new(Literal {
-                token: self.advance().clone(),
+                token: self.advance()?.clone(),
                 value: LiteralValue::Boolean(false),
             })));
         }
 
         if self.check(TokenType::Null) {
             return Ok(ExpLiteral(Rc::new(Literal {
-                token: self.advance().clone(),
+                token: self.advance()?.clone(),
                 value: LiteralValue::Null,
             })));
         }
@@ -1370,12 +1370,12 @@ impl<'ast> Parser<'ast> {
         if self.check(TokenType::Identifier) || self.check(TokenType::Contains) {
             // If followed by ::, it's a static access
             if self.check_next(TokenType::ColonColon) {
-                let class_name = self.advance().clone();
-                let colon_colon_token = self.advance().clone();
+                let class_name = self.advance()?.clone();
+                let colon_colon_token = self.advance()?.clone();
 
                 // Expect function call after ::
                 if self.check(TokenType::Identifier) && self.check_next(TokenType::LeftParen) {
-                    let function_name = self.advance().clone();
+                    let function_name = self.advance()?.clone();
                     let name = Expression::Identifier(Rc::new(function_name));
                     let function_call = self.function_call(name)?;
 
@@ -1400,7 +1400,7 @@ impl<'ast> Parser<'ast> {
 
             // If followed by (, it's a function call
             if self.check_next(TokenType::LeftParen) {
-                let function = self.advance().clone();
+                let function = self.advance()?.clone();
                 let name = Expression::Identifier(Rc::new(function));
 
                 return self.function_call(name);
@@ -1411,12 +1411,12 @@ impl<'ast> Parser<'ast> {
                 return self.lambda_expression(None);
             }
 
-            return Ok(Expression::Identifier(Rc::new(self.advance().clone())));
+            return Ok(Expression::Identifier(Rc::new(self.advance()?.clone())));
         }
 
         // Object creation
         if self.check(TokenType::New) {
-            let new_token = self.advance().clone();
+            let new_token = self.advance()?.clone();
             let expression = self.expression()?;
             match expression {
                 Expression::ObjectCreation(_) => {
@@ -1439,11 +1439,11 @@ impl<'ast> Parser<'ast> {
 
         // Array literal
         if self.check(TokenType::LeftBracket) {
-            let left_bracket = self.advance().clone();
+            let left_bracket = self.advance()?.clone();
 
             // Is actually an empty struct expression in CF, "[:]" means empty struct
             if self.check(TokenType::Colon) {
-                let colon_token = self.advance().clone();
+                let colon_token = self.advance()?.clone();
                 let right_bracket = self
                     .consume(TokenType::RightBracket, |token| {
                         let labels = vec![
@@ -1469,7 +1469,7 @@ impl<'ast> Parser<'ast> {
             while !self.check(TokenType::RightBracket) {
                 let element_expr = self.expression()?;
                 let comma_token = if self.check(TokenType::Comma) {
-                    Some(self.advance().clone())
+                    Some(self.advance()?.clone())
                 } else {
                     None
                 };
@@ -1503,7 +1503,7 @@ impl<'ast> Parser<'ast> {
 
         // Struct literal
         if self.check(TokenType::LeftBrace) {
-            let left_brace = self.advance().clone();
+            let left_brace = self.advance()?.clone();
             let mut elements = Vec::new();
             while !self.check(TokenType::RightBrace) {
                 // Key is identifier or String
@@ -1512,7 +1512,7 @@ impl<'ast> Parser<'ast> {
                     || self.check(TokenType::String)
                     || self.check(TokenType::Number)
                 {
-                    key = Some(self.advance().clone());
+                    key = Some(self.advance()?.clone());
                 } else {
                     self.error(miette!("Expected struct key"))?;
                 }
@@ -1530,7 +1530,7 @@ impl<'ast> Parser<'ast> {
                 }
                 let value = self.expression()?;
                 let comma_token = if self.check(TokenType::Comma) {
-                    Some(self.advance().clone())
+                    Some(self.advance()?.clone())
                 } else {
                     None
                 };
@@ -1549,7 +1549,7 @@ impl<'ast> Parser<'ast> {
                     })?;
                 }
             }
-            let right_brace = self.advance().clone();
+            let right_brace = self.advance()?.clone();
             return Ok(Expression::StructExpression(Rc::new(StructExpression {
                 is_empty: false,
                 left_brace,
@@ -1560,7 +1560,7 @@ impl<'ast> Parser<'ast> {
 
         // Lambda expression
         if self.check(TokenType::LeftParen) {
-            let left_paren = self.advance().clone();
+            let left_paren = self.advance()?.clone();
             if (self.check(TokenType::Identifier)
                 && (self.check_next(TokenType::Comma) || self.check_next(TokenType::RightParen)))
                 || self.check(TokenType::RightParen)
@@ -1593,7 +1593,7 @@ impl<'ast> Parser<'ast> {
     ) -> miette::Result<Expression<'ast>> {
         // Check if we're parsing a function lambda
         let function_token = if self.check(TokenType::Function) {
-            Some(self.advance().clone())
+            Some(self.advance()?.clone())
         } else {
             None
         };
@@ -1622,7 +1622,7 @@ impl<'ast> Parser<'ast> {
                 })?
                 .clone();
             let comma_token = if self.check(TokenType::Comma) {
-                Some(self.advance().clone())
+                Some(self.advance()?.clone())
             } else {
                 None
             };
@@ -1644,7 +1644,7 @@ impl<'ast> Parser<'ast> {
 
         let mut right_paren = None;
         if self.check(TokenType::RightParen) {
-            right_paren = Some(self.advance().clone());
+            right_paren = Some(self.advance()?.clone());
         }
 
         // Function lambdas don't use => token, regular lambdas do
@@ -1710,7 +1710,7 @@ impl<'ast> Parser<'ast> {
             loop {
                 // Named argument, can use either = or : to express
                 if self.check_next(TokenType::Equal) || self.check_next(TokenType::Colon) {
-                    let name = self.advance().clone();
+                    let name = self.advance()?.clone();
 
                     // Consume either = or :
                     self.advance_check(TokenType::Colon);
@@ -1720,7 +1720,7 @@ impl<'ast> Parser<'ast> {
 
                     // Check for comma token
                     let comma_token = if self.check(TokenType::Comma) {
-                        Some(self.advance().clone())
+                        Some(self.advance()?.clone())
                     } else {
                         None
                     };
@@ -1732,7 +1732,7 @@ impl<'ast> Parser<'ast> {
 
                     // Check for comma token
                     let comma_token = if self.check(TokenType::Comma) {
-                        Some(self.advance().clone())
+                        Some(self.advance()?.clone())
                     } else {
                         None
                     };

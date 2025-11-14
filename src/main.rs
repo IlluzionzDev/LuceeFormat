@@ -239,7 +239,7 @@ fn process_file(
         let read_time = start_file.elapsed().as_micros();
 
         // Parse
-        let mut parser = parser::Parser::new(&source, file_path.to_str().unwrap());
+        let mut parser = parser::Parser::new(&source, file_path.to_str().unwrap())?;
         let parse_start = std::time::Instant::now();
         let ast = parser.parse().map_err(Reports::from)?;
         let parse_total_time = parse_start.elapsed().as_micros();
@@ -285,7 +285,7 @@ fn process_file(
 
 fn format_content(input: &str, file_name: &str, max_line_length: usize) -> miette::Result<String> {
     // Parse into AST (parser internally handles lexing)
-    let mut parser = parser::Parser::new(input, file_name);
+    let mut parser = parser::Parser::new(input, file_name)?;
     let ast = parser.parse().map_err(Reports::from)?;
 
     // Format the AST using the visitor pattern

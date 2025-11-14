@@ -1,4 +1,5 @@
 use crate::ast::{BinaryOperator, UnaryOperator};
+use miette::{miette, LabeledSpan, NamedSource};
 use phf::phf_map;
 use std::cell::RefCell;
 use std::cmp::{max, min};
@@ -156,8 +157,8 @@ impl Token<'_> {
         miette::SourceSpan::new(self.span.start.into(), self.span.end - self.span.start)
     }
 
-    pub fn labeled_span(&self, label: &str) -> miette::LabeledSpan {
-        miette::LabeledSpan::at(self.span(), label)
+    pub fn labeled_span(&self, label: &str) -> LabeledSpan {
+        LabeledSpan::at(self.span(), label)
     }
 }
 
@@ -215,6 +216,7 @@ impl Token<'_> {
 
 pub(crate) struct Lexer<'a> {
     pub source: &'a str,
+    pub file_name: &'a str,
 
     start: usize,
     current: usize,
@@ -296,9 +298,10 @@ static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
 };
 
 impl<'a> Lexer<'a> {
-    pub fn new(source: &'a str) -> Lexer<'a> {
+    pub fn new(source: &'a str, file_name: &'a str) -> Lexer<'a> {
         Lexer {
             source,
+            file_name,
             start: 0,
             current: 0,
             line: 1,
@@ -315,13 +318,13 @@ impl<'a> Lexer<'a> {
         self.current >= (&self.source).len()
     }
 
-    pub fn scan_token(&mut self) -> Token<'a> {
+    pub fn scan_token(&mut self) -> miette::Result<Token<'a>> {
         loop {
             self.start = self.current;
             self.column = self.end_column;
 
             if self.is_at_end() {
-                return Token {
+                return Ok(Token {
                     token_type: TokenType::EOF,
                     lexeme: "",
                     line: self.line,
@@ -334,113 +337,113 @@ impl<'a> Lexer<'a> {
                     comments: None,
                     trailing_comments: None,
                     lines_before: self.pop_lines,
-                };
+                });
             }
 
             let c = self.advance();
             match c {
-                '(' => return self.add_token(TokenType::LeftParen),
-                ')' => return self.add_token(TokenType::RightParen),
-                '{' => return self.add_token(TokenType::LeftBrace),
-                '}' => return self.add_token(TokenType::RightBrace),
-                '[' => return self.add_token(TokenType::LeftBracket),
-                ']' => return self.add_token(TokenType::RightBracket),
-                '#' => return self.add_token(TokenType::Hash),
-                ',' => return self.add_token(TokenType::Comma),
-                '.' => return self.add_token(TokenType::Dot),
-                ';' => return self.add_token(TokenType::Semicolon),
+                '(' => return Ok(self.add_token(TokenType::LeftParen)),
+                ')' => return Ok(self.add_token(TokenType::RightParen)),
+                '{' => return Ok(self.add_token(TokenType::LeftBrace)),
+                '}' => return Ok(self.add_token(TokenType::RightBrace)),
+                '[' => return Ok(self.add_token(TokenType::LeftBracket)),
+                ']' => return Ok(self.add_token(TokenType::RightBracket)),
+                '#' => return Ok(self.add_token(TokenType::Hash)),
+                ',' => return Ok(self.add_token(TokenType::Comma)),
+                '.' => return Ok(self.add_token(TokenType::Dot)),
+                ';' => return Ok(self.add_token(TokenType::Semicolon)),
                 '*' => {
-                    return if self.match_char('=') {
+                    return Ok(if self.match_char('=') {
                         self.add_token(TokenType::StarEqual)
                     } else {
                         self.add_token(TokenType::Star)
-                    }
+                    })
                 }
                 '-' => {
-                    return if self.match_char('=') {
+                    return Ok(if self.match_char('=') {
                         self.add_token(TokenType::MinusEqual)
                     } else if self.match_char('-') {
                         self.add_token(TokenType::MinusMinus)
                     } else {
                         self.add_token(TokenType::Minus)
-                    }
+                    })
                 }
                 '+' => {
-                    return if self.match_char('=') {
+                    return Ok(if self.match_char('=') {
                         self.add_token(TokenType::PlusEqual)
                     } else if self.match_char('+') {
                         self.add_token(TokenType::PlusPlus)
                     } else {
                         self.add_token(TokenType::Plus)
-                    }
+                    })
                 }
                 ':' => {
-                    return if self.match_char(':') {
+                    return Ok(if self.match_char(':') {
                         self.add_token(TokenType::ColonColon)
                     } else {
                         self.add_token(TokenType::Colon)
-                    }
+                    })
                 }
                 '?' => {
-                    return if self.match_char(':') {
+                    return Ok(if self.match_char(':') {
                         self.add_token(TokenType::QuestionColon)
                     } else if self.match_char('.') {
                         self.add_token(TokenType::QuestionDot)
                     } else {
                         self.add_token(TokenType::Question)
-                    }
+                    })
                 }
                 '&' => {
-                    return if self.match_char('=') {
+                    return Ok(if self.match_char('=') {
                         self.add_token(TokenType::AmpersandEqual)
                     } else if self.match_char('&') {
                         self.add_token(TokenType::AmpersandAmpersand)
                     } else {
                         self.add_token(TokenType::Ampersand)
-                    }
+                    })
                 }
                 '|' => {
-                    return if self.match_char('|') {
+                    return Ok(if self.match_char('|') {
                         self.add_token(TokenType::PipePipe)
                     } else {
                         self.add_token(TokenType::Pipe)
-                    }
+                    })
                 }
                 '!' => {
-                    return if self.match_char('=') {
+                    return Ok(if self.match_char('=') {
                         self.add_token(TokenType::BangEqual)
                     } else {
                         self.add_token(TokenType::Bang)
-                    }
+                    })
                 }
                 '=' => {
-                    return if self.match_char('>') {
+                    return Ok(if self.match_char('>') {
                         self.add_token(TokenType::Lambda)
                     } else if self.match_char('=') {
                         self.add_token(TokenType::EqualEqual)
                     } else {
                         self.add_token(TokenType::Equal)
-                    }
+                    })
                 }
                 '<' => {
-                    return if self.match_char('=') {
+                    return Ok(if self.match_char('=') {
                         self.add_token(TokenType::LessEqual)
                     } else if self.match_char('/') {
                         self.add_token(TokenType::LessSlash)
                     } else {
                         self.add_token(TokenType::Less)
-                    }
+                    })
                 }
                 '>' => {
-                    return if self.match_char('=') {
+                    return Ok(if self.match_char('=') {
                         self.add_token(TokenType::GreaterEqual)
                     } else {
                         self.add_token(TokenType::Greater)
-                    }
+                    })
                 }
                 '/' => {
                     if self.match_char('=') {
-                        return self.add_token(TokenType::SlashEqual);
+                        return Ok(self.add_token(TokenType::SlashEqual));
                     } else if self.match_char('/') {
                         while self.peek() != '\n' && !self.is_at_end() {
                             self.advance();
@@ -535,12 +538,12 @@ impl<'a> Lexer<'a> {
 
                         continue;
                     } else {
-                        return self.add_token(TokenType::Slash);
+                        return Ok(self.add_token(TokenType::Slash));
                     }
                 }
                 '"' | '\'' => return self.string(),
-                '0'..='9' => return self.number(),
-                'a'..='z' | 'A'..='Z' | '_' => return self.identifier(),
+                '0'..='9' => return Ok(self.number()),
+                'a'..='z' | 'A'..='Z' | '_' => return Ok(self.identifier()),
                 '\t' => {
                     // Tabs are 4 spaces, so add extra 3 onto the 1
                     self.end_column += 3;
@@ -554,9 +557,18 @@ impl<'a> Lexer<'a> {
                     self.pop_lines += 1;
                     continue;
                 }
-                // Don't know this character, oh well keep going ?
-                // Should really display useful error
-                _ => continue,
+                // Unknown token
+                _ => {
+                    let source_span =
+                        miette::SourceSpan::new(self.start.into(), self.current - self.start);
+                    let labels = vec![LabeledSpan::at(source_span, "Here")];
+                    return Err(miette!(
+                        labels = labels,
+                        help = "Probably not correct source code",
+                        "Unexpected token"
+                    )
+                    .with_source_code(NamedSource::new(self.file_name, self.source.to_string())));
+                }
             };
         }
     }
@@ -575,7 +587,7 @@ impl<'a> Lexer<'a> {
         self.add_token(token_type)
     }
 
-    fn string(&mut self) -> Token<'a> {
+    fn string(&mut self) -> miette::Result<Token<'a>> {
         let quote = self
             .source
             .as_bytes()
@@ -600,13 +612,16 @@ impl<'a> Lexer<'a> {
         }
 
         if self.is_at_end() {
-            panic!("Unterminated string at {0}:{1}", self.line, self.current);
+            let source_span = miette::SourceSpan::new(self.start.into(), self.current - self.start);
+            let labels = vec![LabeledSpan::at(source_span, "Here")];
+            return Err(miette!(labels = labels, "Unterminated string")
+                .with_source_code(NamedSource::new(self.file_name, self.source.to_string())));
         }
 
         self.advance();
 
         let value = &self.source[self.start..self.current];
-        self.add_token_full(TokenType::String, value)
+        Ok(self.add_token_full(TokenType::String, value))
     }
 
     fn number(&mut self) -> Token<'a> {
