@@ -103,6 +103,12 @@ pub trait Visitor<T> {
     fn visit_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) -> T {
         self.walk_return_statement(return_statement)
     }
+    fn visit_break_statement(&mut self, break_statement: &crate::ast::BreakStatement) -> T {
+        self.walk_break_statement(break_statement)
+    }
+    fn visit_continue_statement(&mut self, continue_statement: &crate::ast::ContinueStatement) -> T {
+        self.walk_continue_statement(continue_statement)
+    }
     fn visit_function_definition(
         &mut self,
         function_definition: &crate::ast::FunctionDefinition,
@@ -154,6 +160,12 @@ pub trait Visitor<T> {
             }
             Statement::ReturnStatement(return_statement) => {
                 self.visit_return_statement(return_statement)
+            }
+            Statement::BreakStatement(break_statement) => {
+                self.visit_break_statement(break_statement)
+            }
+            Statement::ContinueStatement(continue_statement) => {
+                self.visit_continue_statement(continue_statement)
             }
             Statement::FunctionDefinition(function_definition) => {
                 self.visit_function_definition(function_definition)
@@ -305,6 +317,12 @@ pub trait Visitor<T> {
             Some(value) => self.visit_expression(value),
             None => self.combine_docs(&mut vec![]),
         }
+    }
+    fn walk_break_statement(&mut self, break_statement: &crate::ast::BreakStatement) -> T {
+        self.combine_docs(&mut vec![])
+    }
+    fn walk_continue_statement(&mut self, continue_statement: &crate::ast::ContinueStatement) -> T {
+        self.combine_docs(&mut vec![])
     }
     fn walk_function_definition(
         &mut self,

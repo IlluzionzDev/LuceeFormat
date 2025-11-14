@@ -25,6 +25,8 @@ pub enum Statement<'ast> {
     ExpressionStmt(Rc<ExpressionStatement<'ast>>),
     VariableDeclaration(Rc<VariableDeclaration<'ast>>),
     ReturnStatement(Rc<ReturnStatement<'ast>>),
+    BreakStatement(Rc<BreakStatement<'ast>>),
+    ContinueStatement(Rc<ContinueStatement<'ast>>),
     FunctionDefinition(Rc<FunctionDefinition<'ast>>),
     ComponentDefinition(Rc<ComponentDefinition<'ast>>),
     LuceeFunction(Rc<LuceeFunction<'ast>>),
@@ -92,6 +94,30 @@ pub struct ReturnStatement<'ast> {
 impl<'ast, T> Walkable<T> for ReturnStatement<'ast> {
     fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
         visitor.visit_return_statement(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BreakStatement<'ast> {
+    pub break_token: Token<'ast>,
+    pub semicolon_token: Option<Token<'ast>>,
+}
+
+impl<'ast, T> Walkable<T> for BreakStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_break_statement(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ContinueStatement<'ast> {
+    pub continue_token: Token<'ast>,
+    pub semicolon_token: Option<Token<'ast>>,
+}
+
+impl<'ast, T> Walkable<T> for ContinueStatement<'ast> {
+    fn walk<V: crate::visitor::Visitor<T>>(&self, visitor: &mut V) -> T {
+        visitor.visit_continue_statement(self)
     }
 }
 

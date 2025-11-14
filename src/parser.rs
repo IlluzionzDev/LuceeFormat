@@ -1,12 +1,12 @@
 use crate::ast::Expression::Literal as ExpLiteral;
 use crate::ast::{
-    AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, CaseStatement,
-    ComponentDefinition, Expression, ExpressionStatement, ForControl, ForStatement, FunctionCall,
-    FunctionDefinition, GroupExpression, IfStatement, IndexAccess, LambdaExpression, Literal,
-    LiteralValue, LuceeFunction, MemberAccess, ObjectCreation, Parameter, ReturnStatement,
-    Statement, StaticAccess, StringValue, StructExpression, SwitchStatement, TernaryExpression,
-    TryCatchStatement, UnaryExpression, UnaryOperator, VariableAssignment, VariableDeclaration,
-    WhileStatement, AST,
+    AccessModifier, ArrayExpression, BinaryExpression, BinaryOperator, BreakStatement,
+    CaseStatement, ComponentDefinition, ContinueStatement, Expression, ExpressionStatement,
+    ForControl, ForStatement, FunctionCall, FunctionDefinition, GroupExpression, IfStatement,
+    IndexAccess, LambdaExpression, Literal, LiteralValue, LuceeFunction, MemberAccess,
+    ObjectCreation, Parameter, ReturnStatement, Statement, StaticAccess, StringValue,
+    StructExpression, SwitchStatement, TernaryExpression, TryCatchStatement, UnaryExpression,
+    UnaryOperator, VariableAssignment, VariableDeclaration, WhileStatement, AST,
 };
 use crate::lexer::{Lexer, SourceSpan, Token, TokenType};
 use miette::{miette, LabeledSpan, NamedSource, Report};
@@ -193,6 +193,44 @@ impl<'ast> Parser<'ast> {
             return Ok(Statement::ReturnStatement(Rc::new(ReturnStatement {
                 return_token,
                 value: Some(expression),
+                semicolon_token,
+            })));
+        }
+
+        if self.check(TokenType::Break) {
+            let break_token = self
+                .consume(TokenType::Break, |token| {
+                    let labels = vec![LabeledSpan::at(token.span(), "Expected 'break' here")];
+
+                    miette!(labels = labels, "Expected 'break' keyword")
+                })?
+                .clone();
+            let semicolon_token = if self.check(TokenType::Semicolon) {
+                Some(self.advance()?.clone())
+            } else {
+                None
+            };
+            return Ok(Statement::BreakStatement(Rc::new(BreakStatement {
+                break_token,
+                semicolon_token,
+            })));
+        }
+
+        if self.check(TokenType::Continue) {
+            let continue_token = self
+                .consume(TokenType::Continue, |token| {
+                    let labels = vec![LabeledSpan::at(token.span(), "Expected 'continue' here")];
+
+                    miette!(labels = labels, "Expected 'continue' keyword")
+                })?
+                .clone();
+            let semicolon_token = if self.check(TokenType::Semicolon) {
+                Some(self.advance()?.clone())
+            } else {
+                None
+            };
+            return Ok(Statement::ContinueStatement(Rc::new(ContinueStatement {
+                continue_token,
                 semicolon_token,
             })));
         }

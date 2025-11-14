@@ -1256,6 +1256,55 @@ impl Visitor<Doc> for Formatter {
 
         Doc::Group(docs)
     }
+
+    fn visit_break_statement(&mut self, break_statement: &crate::ast::BreakStatement) -> Doc {
+        let mut docs = Vec::with_capacity(7);
+        docs.push(self.pop_comment(&break_statement.break_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&break_statement.break_token));
+        self.beginning_statement = false;
+
+        docs.push(Doc::Text("break".to_string()));
+        docs.push(self.pop_trailing_comments(&break_statement.break_token));
+
+        // Handle trailing comments on semicolon if it exists in original source
+        if let Some(semicolon) = &break_statement.semicolon_token {
+            docs.push(self.pop_comment(semicolon, true));
+        }
+
+        // Always print semicolon, even if it wasn't in the original source
+        docs.push(Doc::Text(";".to_string()));
+
+        if let Some(semicolon) = &break_statement.semicolon_token {
+            docs.push(self.pop_trailing_comments(semicolon));
+        }
+
+        Doc::Group(docs)
+    }
+
+    fn visit_continue_statement(&mut self, continue_statement: &crate::ast::ContinueStatement) -> Doc {
+        let mut docs = Vec::with_capacity(7);
+        docs.push(self.pop_comment(&continue_statement.continue_token, !self.beginning_statement));
+        docs.push(self.pop_whitespace(&continue_statement.continue_token));
+        self.beginning_statement = false;
+
+        docs.push(Doc::Text("continue".to_string()));
+        docs.push(self.pop_trailing_comments(&continue_statement.continue_token));
+
+        // Handle trailing comments on semicolon if it exists in original source
+        if let Some(semicolon) = &continue_statement.semicolon_token {
+            docs.push(self.pop_comment(semicolon, true));
+        }
+
+        // Always print semicolon, even if it wasn't in the original source
+        docs.push(Doc::Text(";".to_string()));
+
+        if let Some(semicolon) = &continue_statement.semicolon_token {
+            docs.push(self.pop_trailing_comments(semicolon));
+        }
+
+        Doc::Group(docs)
+    }
+
     fn visit_function_definition(
         &mut self,
         function_definition: &crate::ast::FunctionDefinition,
