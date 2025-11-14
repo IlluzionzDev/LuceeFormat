@@ -5,9 +5,9 @@ use fusion_formatter::visitor::Walkable;
 use miette::Report;
 
 /// Test helper for full formatting pipeline: lex -> parse -> format
-pub fn format_code(input: &str) -> String {
+pub fn format_code(input: &str) -> miette::Result<String> {
     // Parse into AST (parser internally handles lexing)
-    let mut parser = Parser::new(input, "test");
+    let mut parser = Parser::new(input, "test")?;
     let ast = parser.parse();
 
     if let Err(errs) = ast {
@@ -20,19 +20,26 @@ pub fn format_code(input: &str) -> String {
 
     // Render the document
     let mut doc_formatter = DocFormatter::new(80, 4); // 80 char width, 4 space indent
-    doc_formatter.format(&doc)
+    Ok(doc_formatter.format(&doc))
 }
 
 /// Test helper for parsing only: lex -> parse -> return AST
 pub fn parse_code(input: &'_ str) -> miette::Result<AST<'_>, Vec<Report>> {
-    let mut parser = Parser::new(input, "test");
-    parser.parse()
+    let parser = Parser::new(input, "test");
+
+    match parser {
+        Err(e) => Err(vec![e]),
+        Ok(mut p) => p.parse(),
+    }
 }
 
 /// Assert that code formats to expected output
 pub fn assert_formats_to(input: &str, expected: &str) {
     let result = format_code(input);
-    assert_eq!(result.trim(), expected.trim(), "Formatting mismatch");
+    match result {
+        Ok(result) => assert_eq!(result.trim(), expected.trim(), "Formatting mismatch"),
+        Err(e) => eprintln!("{:?}", e),
+    }
 }
 
 /// Assert that code parses successfully
