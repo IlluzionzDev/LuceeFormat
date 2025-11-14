@@ -968,7 +968,12 @@ impl<'ast> Parser<'ast> {
 
             if self.check(TokenType::Default) {
                 if !condition.is_empty() {
+                    let labels = vec![LabeledSpan::at(
+                        self.current.span(),
+                        "Got default when case already declared",
+                    )];
                     self.error(miette!(
+                        labels = labels,
                         "Cannot mix 'case' and 'default' in a switch statement"
                     ))?;
                 }
@@ -1004,24 +1009,7 @@ impl<'ast> Parser<'ast> {
             }
 
             // Parse last break / return statement, optional as can be empty case
-            if self.check(TokenType::Break) {
-                let break_statement = self.advance()?.clone();
-                let semicolon_token = self
-                    .consume(TokenType::Semicolon, |token| {
-                        let labels = vec![LabeledSpan::at(token.span(), "Expected ';' here")];
-                        miette!(labels = labels, "Expected ';' keyword")
-                    })?
-                    .clone();
-                body.push(Statement::LuceeFunction(Rc::new(LuceeFunction {
-                    name: break_statement,
-                    attributes: Vec::new(),
-                    body: None,
-                    left_brace: None,
-                    right_brace: None,
-                    semicolon_token: Some(semicolon_token),
-                })));
-            } else if self.check(TokenType::Return) {
-                // Push return statement
+            if self.check(TokenType::Break) || self.check(TokenType::Return) {
                 body.push(self.statement()?);
             }
 
@@ -1552,7 +1540,8 @@ impl<'ast> Parser<'ast> {
                 {
                     key = Some(self.advance()?.clone());
                 } else {
-                    self.error(miette!("Expected struct key"))?;
+                    let labels = vec![LabeledSpan::at(self.current.span(), "Here")];
+                    self.error(miette!(labels = labels, "Expected struct key"))?;
                 }
                 if !self.advance_check(TokenType::Colon) && !self.advance_check(TokenType::Equal) {
                     if let Some(k) = &key {
