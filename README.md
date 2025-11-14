@@ -14,15 +14,10 @@ complex rules, and just runs through tokens in microseconds.
 
 # Dev TODO
 
-- [ ] CLI Tasks
-    - [X] Still check / format files if some fail to parse
-    - [X] Multithread checking / formatting
-    - [X] Nicely present failing files at end of checking / formatting
-- [ ] When printing struct keys, if is string and has spaces, preserve quotes
 - [X] Better error handling - improve, show main block that requires token
-- [ ] Passing named args to function doesn't require commas ??
-- [ ] Lucee function, allow name only args (without value)
-- [ ] Handle CFScript, as well as CFScript in CFM files :/
+- [ ] Lexer to report errors, mostly string parsing errors
+
+- [ ] Handle CFML, as well as CFScript in CFM files :/
 - [ ] Robust tests
 - [ ] (Future) Add linting capabilities
 
@@ -32,8 +27,13 @@ complex rules, and just runs through tokens in microseconds.
 
 ## Breaking TODOS (Need to be done before production code formatter)
 
+- Allow 'break' and 'continue' statements
+- Passing named args to function doesn't require commas ??
+- Lucee function, allow name only args (without value)
+- Static access can also just access identifiers
 - In case statements, break doesn't need ';'
 - Handle 'does not contain' statement
+- Indents seem to sometimes indent before line break
 
 ## Backlog TODOS (Niceties but not critical)
 

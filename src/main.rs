@@ -1,5 +1,3 @@
-#![feature(associated_type_defaults)]
-
 use crate::formatter::{DocFormatter, Formatter};
 use crate::visitor::{Visitor, Walkable};
 use clap::Parser;
