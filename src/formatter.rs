@@ -14,6 +14,8 @@ pub enum Doc {
     HardLine,
     // Indents the doc
     Indent(Box<Doc>),
+    // Cancels one level of indentation (for block expressions in argument contexts)
+    Dedent(Box<Doc>),
     // Main way to group elements together
     Group(Vec<Doc>),
     Docs(Vec<Doc>), // Just a grouping that renders it's children, doesn't do anything else
@@ -29,6 +31,7 @@ impl Doc {
         match self {
             Doc::Text(text) => text.len(),
             Doc::Indent(doc) => doc.width(),
+            Doc::Dedent(doc) => doc.width(),
             Doc::Group(docs) => docs.iter().map(|doc| doc.width()).sum(),
             Doc::Docs(docs) => docs.iter().map(|doc| doc.width()).sum(),
             Doc::BreakableSpace => 1,
@@ -41,6 +44,7 @@ impl Doc {
         match self {
             Doc::ForceBreak => true,
             Doc::Indent(doc) => doc.contains_force_break(),
+            Doc::Dedent(doc) => doc.contains_force_break(),
             Doc::Group(docs) | Doc::Docs(docs) => docs.iter().any(|doc| doc.contains_force_break()),
             _ => false,
         }
@@ -102,6 +106,22 @@ impl DocFormatter {
                 }
                 self.write_doc(doc, is_flat);
                 self.current_indent -= self.indent_size;
+            }
+            Doc::Dedent(doc) => {
+                // Only dedent when in flat mode (not breaking)
+                // When breaking, the normal indentation is correct
+                if is_flat {
+                    // Only dedent if we have indent to remove (prevent underflow)
+                    if self.current_indent >= self.indent_size {
+                        self.current_indent -= self.indent_size;
+                    }
+                    self.write_doc(doc, is_flat);
+                    // Restore indent level
+                    self.current_indent += self.indent_size;
+                } else {
+                    // When breaking, just render without dedenting
+                    self.write_doc(doc, is_flat);
+                }
             }
             Doc::Docs(docs) => {
                 for doc in docs {
@@ -184,6 +204,12 @@ impl Formatter {
             beginning_statement: true,
             collapse_whitespace: true,
         }
+    }
+
+    /// Check if an expression is a block-level expression that needs dedenting when used as an argument
+    /// These are expressions that have their own internal indentation (like lambda bodies)
+    fn is_block_expression(expr: &crate::ast::Expression) -> bool {
+        matches!(expr, crate::ast::Expression::LambdaExpression(_))
     }
 
     /// Formats a statement body with braces, handling compact single-line vs multi-line formatting
@@ -826,7 +852,15 @@ impl Visitor<Doc> for Formatter {
                 None => {}
             }
 
-            arg_docs.push(self.visit_expression(&arg.1));
+            // Visit the argument expression
+            let arg_expr_doc = self.visit_expression(&arg.1);
+
+            // Wrap block expressions (like lambdas) in Dedent to cancel the function call's indent
+            if Self::is_block_expression(&arg.1) {
+                arg_docs.push(Doc::Dedent(Box::new(arg_expr_doc)));
+            } else {
+                arg_docs.push(arg_expr_doc);
+            }
 
             full_arg_docs.push(Doc::Group(arg_docs));
 
@@ -1134,7 +1168,24 @@ impl Visitor<Doc> for Formatter {
         indent_docs.push(self.pop_comment(&member_expression.dot_token, true));
         indent_docs.push(Doc::Text(".".to_string()));
         indent_docs.push(self.pop_trailing_comments(&member_expression.dot_token));
-        indent_docs.push(self.visit_expression(&member_expression.property));
+
+        let property_doc = self.visit_expression(&member_expression.property);
+
+        // Check if property is a function call with block expression arguments
+        let has_block_args = if let crate::ast::Expression::FunctionCall(fc) = &member_expression.property {
+            fc.args.iter().any(|(_, expr, _)| Self::is_block_expression(expr))
+        } else {
+            false
+        };
+
+        // If the function call has block arguments (like lambdas), add an extra Dedent
+        // to cancel this member expression's indent in addition to the function call's indent
+        if has_block_args {
+            indent_docs.push(Doc::Dedent(Box::new(property_doc)));
+        } else {
+            indent_docs.push(property_doc);
+        }
+
         docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
         Doc::Group(docs)
     }
