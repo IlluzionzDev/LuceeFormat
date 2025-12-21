@@ -27,13 +27,15 @@ complex rules, and just runs through tokens in microseconds.
 
 ## Breaking TODOS (Need to be done before production code formatter)
 
-- Allow 'break' and 'continue' statements
+- Lambda as argument, indents on end line too much
 - Passing named args to function doesn't require commas ??
 - Lucee function, allow name only args (without value)
 - Static access can also just access identifiers
-- In case statements, break doesn't need ';'
 - Handle 'does not contain' statement
 - Indents seem to sometimes indent before line break
+- Indent in case body, first statement isn't indented
+- Instantiation of package components (e.g one.two.three()) need to be on same line. Should check after ObjectCreation
+  node
 
 ## Backlog TODOS (Niceties but not critical)
 

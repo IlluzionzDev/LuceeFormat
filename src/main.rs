@@ -14,6 +14,7 @@ mod ast;
 mod formatter;
 mod lexer;
 mod parser;
+mod pretty_print;
 mod visitor;
 
 #[derive(Parser)]
@@ -46,6 +47,33 @@ struct Cli {
         help = "Optional file to output formatted content to (Instead of overwriting original file). Only works if formatting single file"
     )]
     output: Option<String>,
+
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Print the AST structure instead of formatting"
+    )]
+    print_ast: bool,
+
+    #[arg(
+        long,
+        help = "Maximum depth to display when printing AST (unlimited if not specified)"
+    )]
+    ast_depth: Option<usize>,
+
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Use ANSI colors when printing AST"
+    )]
+    ast_colors: bool,
+
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Show token positions (line:col) in AST output"
+    )]
+    ast_show_tokens: bool,
 }
 
 fn main() -> miette::Result<()> {
@@ -56,6 +84,11 @@ fn main() -> miette::Result<()> {
     if !path.exists() {
         eprintln!("Error: Path '{}' does not exist.", cli.format_path);
         process::exit(0);
+    }
+
+    // If print_ast is enabled, handle AST printing separately
+    if cli.print_ast {
+        return print_ast_for_path(&path, &cli);
     }
 
     let output_path = if let Some(output_path) = &cli.output {
@@ -148,6 +181,43 @@ fn main() -> miette::Result<()> {
         "\n{} {} {} in {}ms",
         action, file_count, file_word, total_time
     );
+
+    Ok(())
+}
+
+/// Print the AST for a given path
+fn print_ast_for_path(path: &PathBuf, cli: &Cli) -> miette::Result<()> {
+    // Only support single files for AST printing
+    if path.is_dir() {
+        eprintln!("Error: AST printing only supports single files, not directories.");
+        process::exit(1);
+    }
+
+    if path.extension().and_then(|s| s.to_str()) != Some("cfc") {
+        eprintln!("Error: File '{}' is not a .cfc file.", path.display());
+        process::exit(1);
+    }
+
+    // Read the file
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| miette::miette!("Failed to read file: {}", e))?;
+
+    // Parse into AST
+    let mut parser = parser::Parser::new(&source, path.to_str().unwrap())?;
+    let ast = parser.parse().map_err(Reports::from)?;
+
+    // Configure pretty print settings
+    let config = pretty_print::PrettyPrintConfig {
+        show_tokens: cli.ast_show_tokens,
+        show_token_values: true,
+        max_depth: cli.ast_depth,
+        use_colors: cli.ast_colors,
+        compact_mode: false,
+    };
+
+    // Print the AST
+    let ast_output = ast.pretty_print_with_config(config);
+    println!("{}", ast_output);
 
     Ok(())
 }

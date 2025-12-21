@@ -20,6 +20,18 @@ impl<'ast, T> Walkable<T> for AST<'ast> {
     }
 }
 
+impl<'ast> AST<'ast> {
+    /// Pretty print the AST with default configuration
+    pub fn pretty_print(&self) -> String {
+        crate::pretty_print::pretty_print(self)
+    }
+
+    /// Pretty print the AST with custom configuration
+    pub fn pretty_print_with_config(&self, config: crate::pretty_print::PrettyPrintConfig) -> String {
+        crate::pretty_print::pretty_print_with_config(self, config)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Statement<'ast> {
     ExpressionStmt(Rc<ExpressionStatement<'ast>>),
