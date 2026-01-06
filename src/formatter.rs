@@ -194,6 +194,10 @@ pub struct Formatter {
     /// of a function, to ensure the first statement has no whitespace before it.
     /// Once #pop_whitespace is called, this flag is reset to false.
     pub collapse_whitespace: bool,
+
+    /// Indicates we're formatting a chainable lambda callback pattern: object.method((x) => { body })
+    /// When true, function calls and lambdas format compactly (signature inline, only body breaks)
+    in_chainable_lambda_context: bool,
 }
 
 impl Formatter {
@@ -203,6 +207,7 @@ impl Formatter {
             indent_level: 0,
             beginning_statement: true,
             collapse_whitespace: true,
+            in_chainable_lambda_context: false,
         }
     }
 
@@ -210,6 +215,19 @@ impl Formatter {
     /// These are expressions that have their own internal indentation (like lambda bodies)
     fn is_block_expression(expr: &crate::ast::Expression) -> bool {
         matches!(expr, crate::ast::Expression::LambdaExpression(_))
+    }
+
+    /// Check if a function call follows the chainable lambda callback pattern
+    /// Pattern: `.method((param) => { body })`
+    /// This is a common pattern in functional programming where a lambda is the primary/only argument
+    fn is_chainable_lambda_call(expr: &crate::ast::Expression) -> bool {
+        if let crate::ast::Expression::FunctionCall(fc) = expr {
+            // Check if first argument is a lambda
+            if let Some((_, first_arg, _)) = fc.args.first() {
+                return matches!(first_arg, crate::ast::Expression::LambdaExpression(_));
+            }
+        }
+        false
     }
 
     /// Formats a statement body with braces, handling compact single-line vs multi-line formatting
@@ -835,54 +853,84 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&function_call.left_paren, true));
         docs.push(Doc::Text("(".to_string()));
         docs.push(self.pop_trailing_comments(&function_call.left_paren));
-        docs.push(Doc::Line);
 
-        let mut it = function_call.args.iter().peekable();
-
-        let mut full_arg_docs = vec![];
-        while let Some(arg) = it.next() {
-            let mut arg_docs = Vec::with_capacity(4);
-            match &arg.0 {
-                Some(token) => {
-                    arg_docs.push(self.pop_comment(token, true));
-                    arg_docs.push(Doc::Text(token.lexeme.to_string()));
-                    arg_docs.push(self.pop_trailing_comments(token));
-                    arg_docs.push(Doc::Text(" = ".to_string()));
+        // If chainable lamda, want to format argument on same line as call.
+        // TODO: Should improve this logic to allow other arguments to be on new lines
+        if self.in_chainable_lambda_context {
+            for (i, (name_token, arg_expr, comma_token)) in function_call.args.iter().enumerate() {
+                // Handle named arguments
+                if let Some(token) = name_token {
+                    docs.push(self.pop_comment(token, true));
+                    docs.push(Doc::Text(token.lexeme.to_string()));
+                    docs.push(self.pop_trailing_comments(token));
+                    docs.push(Doc::Text(" = ".to_string()));
                 }
-                None => {}
-            }
 
-            // Visit the argument expression
-            let arg_expr_doc = self.visit_expression(&arg.1);
+                // Visit the argument expression (lambda will format compactly too)
+                docs.push(self.visit_expression(arg_expr));
 
-            // Wrap block expressions (like lambdas) in Dedent to cancel the function call's indent
-            if Self::is_block_expression(&arg.1) {
-                arg_docs.push(Doc::Dedent(Box::new(arg_expr_doc)));
-            } else {
-                arg_docs.push(arg_expr_doc);
+                // Add comma and space for non-last arguments
+                if i < function_call.args.len() - 1 {
+                    if let Some(comma) = comma_token {
+                        docs.push(self.pop_comment(comma, true));
+                    }
+                    docs.push(Doc::Text(", ".to_string()));
+                    if let Some(comma) = comma_token {
+                        docs.push(self.pop_trailing_comments(comma));
+                    }
+                }
             }
+        } else {
+            docs.push(Doc::Line);
 
-            full_arg_docs.push(Doc::Group(arg_docs));
+            let mut it = function_call.args.iter().peekable();
 
-            if let Some(comma) = &arg.2 {
-                full_arg_docs.push(self.pop_comment(comma, true));
-            }
-            if it.peek().is_some() {
-                full_arg_docs.push(Doc::Text(",".to_string()));
-            }
+            let mut full_arg_docs = vec![];
+            while let Some(arg) = it.next() {
+                let mut arg_docs = Vec::with_capacity(4);
+                match &arg.0 {
+                    Some(token) => {
+                        arg_docs.push(self.pop_comment(token, true));
+                        arg_docs.push(Doc::Text(token.lexeme.to_string()));
+                        arg_docs.push(self.pop_trailing_comments(token));
+                        arg_docs.push(Doc::Text(" = ".to_string()));
+                    }
+                    None => {}
+                }
 
-            if let Some(comma) = &arg.2 {
-                full_arg_docs.push(self.pop_trailing_comments(comma));
-            }
+                // Visit the argument expression
+                let arg_expr_doc = self.visit_expression(&arg.1);
 
-            if it.peek().is_some() {
-                full_arg_docs.push(Doc::BreakableSpace);
+                // Wrap block expressions (like lambdas) in Dedent to cancel the function call's indent
+                if Self::is_block_expression(&arg.1) {
+                    arg_docs.push(Doc::Dedent(Box::new(arg_expr_doc)));
+                } else {
+                    arg_docs.push(arg_expr_doc);
+                }
+
+                full_arg_docs.push(Doc::Group(arg_docs));
+
+                if let Some(comma) = &arg.2 {
+                    full_arg_docs.push(self.pop_comment(comma, true));
+                }
+                if it.peek().is_some() {
+                    full_arg_docs.push(Doc::Text(",".to_string()));
+                }
+
+                if let Some(comma) = &arg.2 {
+                    full_arg_docs.push(self.pop_trailing_comments(comma));
+                }
+
+                if it.peek().is_some() {
+                    full_arg_docs.push(Doc::BreakableSpace);
+                }
             }
+            docs.push(Doc::Indent(Box::new(Doc::Group(full_arg_docs))));
+
+            docs.push(self.pop_comment(&function_call.right_paren, true));
+            docs.push(Doc::Line);
         }
-        docs.push(Doc::Indent(Box::new(Doc::Group(full_arg_docs))));
 
-        docs.push(self.pop_comment(&function_call.right_paren, true));
-        docs.push(Doc::Line);
         docs.push(Doc::Text(")".to_string()));
         docs.push(self.pop_trailing_comments(&function_call.right_paren));
 
@@ -1005,6 +1053,73 @@ impl Visitor<Doc> for Formatter {
         Doc::Group(docs)
     }
     fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) -> Doc {
+        // If calling lambda like function((arg) => {
+        // we need to format lambda in a specific way to format inline. For now handled
+        // in an if block, should refactor so we aren't duplicating logic.
+        // TODO: Refactor, this was easier for now to get the job done
+        if self.in_chainable_lambda_context {
+            let mut docs = vec![];
+
+            // Handle function token if present
+            if let Some(function_token) = &lambda_expression.function_token {
+                docs.push(self.pop_comment(function_token, true));
+                docs.push(Doc::Text("function".to_string()));
+                docs.push(self.pop_trailing_comments(function_token));
+            }
+
+            // Opening paren
+            if let Some(left_paren) = &lambda_expression.left_paren {
+                docs.push(self.pop_comment(left_paren, true));
+            }
+            docs.push(Doc::Text("(".to_string()));
+            if let Some(left_paren) = &lambda_expression.left_paren {
+                docs.push(self.pop_trailing_comments(left_paren));
+            }
+
+            // Format parameters inline
+            for (i, (param, comma_token)) in lambda_expression.parameters.iter().enumerate() {
+                docs.push(self.pop_comment(param, true));
+                docs.push(Doc::Text(param.lexeme.to_string()));
+                docs.push(self.pop_trailing_comments(param));
+
+                if i < lambda_expression.parameters.len() - 1 {
+                    if let Some(comma) = comma_token {
+                        docs.push(self.pop_comment(comma, true));
+                    }
+                    docs.push(Doc::Text(", ".to_string()));
+                    if let Some(comma) = comma_token {
+                        docs.push(self.pop_trailing_comments(comma));
+                    }
+                }
+            }
+
+            // Closing paren
+            if let Some(right_paren) = &lambda_expression.right_paren {
+                docs.push(self.pop_comment(right_paren, true));
+            }
+            docs.push(Doc::Text(") ".to_string()));
+            if let Some(right_paren) = &lambda_expression.right_paren {
+                docs.push(self.pop_trailing_comments(right_paren));
+            }
+
+            // Arrow or space
+            if lambda_expression.function_token.is_none() {
+                docs.push(self.pop_comment(&lambda_expression.lambda_token, true));
+                docs.push(Doc::Text("=> ".to_string()));
+                docs.push(self.pop_trailing_comments(&lambda_expression.lambda_token));
+            }
+
+            docs.push(self.format_statement_body(
+                &lambda_expression.body,
+                lambda_expression.left_brace.as_ref(),
+                lambda_expression.right_brace.as_ref(),
+                false,
+            ));
+
+            return Doc::Group(docs);
+        }
+
+        // NORMAL MODE: Format with Group/Indent wrapping
         let mut docs = Vec::with_capacity(8);
 
         // Handle function token if present (function lambdas)
@@ -1152,6 +1267,23 @@ impl Visitor<Doc> for Formatter {
         Doc::Group(docs)
     }
     fn visit_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) -> Doc {
+        // Check for chainable lambda callback pattern: .method((param) => { body })
+        if Self::is_chainable_lambda_call(&member_expression.property) {
+            // Use compact formatting for chainable lambda callbacks
+            let mut docs = vec![];
+            docs.push(self.visit_expression(&member_expression.object));
+            docs.push(self.pop_comment(&member_expression.dot_token, true));
+            docs.push(Doc::Text(".".to_string()));
+            docs.push(self.pop_trailing_comments(&member_expression.dot_token));
+
+            // Set flag and format the function call compactly
+            self.in_chainable_lambda_context = true;
+            docs.push(self.visit_expression(&member_expression.property));
+            self.in_chainable_lambda_context = false;
+
+            return Doc::Group(docs);
+        }
+
         // Check if this member expression's object is part of an access chain (member or index)
         if Self::is_access_chain(&member_expression.object) {
             // This is part of a mixed access chain - use unified chain formatting
@@ -1172,11 +1304,14 @@ impl Visitor<Doc> for Formatter {
         let property_doc = self.visit_expression(&member_expression.property);
 
         // Check if property is a function call with block expression arguments
-        let has_block_args = if let crate::ast::Expression::FunctionCall(fc) = &member_expression.property {
-            fc.args.iter().any(|(_, expr, _)| Self::is_block_expression(expr))
-        } else {
-            false
-        };
+        let has_block_args =
+            if let crate::ast::Expression::FunctionCall(fc) = &member_expression.property {
+                fc.args
+                    .iter()
+                    .any(|(_, expr, _)| Self::is_block_expression(expr))
+            } else {
+                false
+            };
 
         // If the function call has block arguments (like lambdas), add an extra Dedent
         // to cancel this member expression's indent in addition to the function call's indent
@@ -1332,9 +1467,15 @@ impl Visitor<Doc> for Formatter {
         Doc::Group(docs)
     }
 
-    fn visit_continue_statement(&mut self, continue_statement: &crate::ast::ContinueStatement) -> Doc {
+    fn visit_continue_statement(
+        &mut self,
+        continue_statement: &crate::ast::ContinueStatement,
+    ) -> Doc {
         let mut docs = Vec::with_capacity(7);
-        docs.push(self.pop_comment(&continue_statement.continue_token, !self.beginning_statement));
+        docs.push(self.pop_comment(
+            &continue_statement.continue_token,
+            !self.beginning_statement,
+        ));
         docs.push(self.pop_whitespace(&continue_statement.continue_token));
         self.beginning_statement = false;
 

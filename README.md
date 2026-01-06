@@ -27,7 +27,9 @@ complex rules, and just runs through tokens in microseconds.
 
 ## Breaking TODOS (Need to be done before production code formatter)
 
-- Lambda as argument, indents on end line too much
+- Still seems to be issue with MemberExpression chaining and indented when not broken, and breaking when shouldn't. #1
+  Priority
+- Allow escaping ' with another ' inside string. Lexer should detect '' sequence
 - Passing named args to function doesn't require commas ??
 - Lucee function, allow name only args (without value)
 - Static access can also just access identifiers
