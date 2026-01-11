@@ -699,7 +699,7 @@ impl Formatter {
             }
         }
 
-        docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
+        docs.push(Doc::Indent(Box::new(Doc::Docs(indent_docs))));
 
         Doc::Group(docs) // Single group for entire mixed chain
     }
