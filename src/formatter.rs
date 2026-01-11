@@ -269,7 +269,10 @@ impl Formatter {
 
         // Set up body formatting
         let mut body_docs = vec![];
-        self.collapse_whitespace = true;
+        // Tell body statements to collpase whitespace inside
+        if !body.is_empty() {
+            self.collapse_whitespace = true;
+        }
 
         // Determine if we should use compact formatting
         // let use_compact = allow_compact && body.len() == 1;
@@ -394,6 +397,8 @@ impl Formatter {
         }
     }
 
+    /// Formats / pops trailing comments on this token, but also forces a line break if a comment appeared
+    /// Should be called after the token content has been processed
     fn pop_trailing_comments_break(&mut self, token: &Token) -> Doc {
         let mut docs = vec![];
 
