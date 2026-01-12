@@ -2,6 +2,7 @@ use crate::ast::{AccessModifier, BinaryOperator, ForControl, LiteralValue, State
 use crate::lexer::{CommentType, Token};
 use crate::visitor::Visitor;
 use std::cmp::PartialEq;
+use std::collections::HashMap;
 use std::iter;
 
 #[derive(Clone, Debug)]
@@ -53,12 +54,42 @@ impl Doc {
     }
 }
 
+/// Analysis result for a Group node
+#[derive(Debug, Clone)]
+struct GroupAnalysis {
+    /// Whether this group should break
+    should_break: bool,
+    /// Width if kept completely flat (all nested groups also flat)
+    flat_width: usize,
+    /// Max line width when this group breaks (respecting Line nodes)
+    broken_width: usize,
+    /// Width of just the first line when this group breaks
+    first_line_width: usize,
+    /// Whether this group or any nested group contains ForceBreak
+    has_force_break: bool,
+}
+
+/// Context for analyzing the Doc tree
+struct AnalysisContext {
+    max_width: usize,
+    indent_size: usize,
+    current_indent: usize,
+    /// Maps group_id to breaking decision
+    break_decisions: HashMap<usize, bool>,
+    /// Counter for assigning unique IDs to groups
+    next_group_id: usize,
+}
+
 pub struct DocFormatter {
     pub max_width: usize,
     pub indent_size: usize,
     current_indent: usize,
     current_line_length: usize,
     output: String,
+    /// Breaking decisions from analysis pass
+    break_decisions: HashMap<usize, bool>,
+    /// Counter for tracking which group we're rendering
+    current_group_id: usize,
 }
 
 impl DocFormatter {
@@ -69,6 +100,8 @@ impl DocFormatter {
             current_indent: 0,
             current_line_length: 0,
             output: String::new(),
+            break_decisions: HashMap::new(),
+            current_group_id: 0,
         }
     }
 
@@ -76,8 +109,258 @@ impl DocFormatter {
         self.output.clear();
         self.current_line_length = 0;
         self.current_indent = 0;
+
+        // Pass 1: Analyze and determine breaking decisions
+        let mut context = AnalysisContext {
+            max_width: self.max_width,
+            indent_size: self.indent_size,
+            current_indent: 0,
+            break_decisions: HashMap::new(),
+            next_group_id: 0,
+        };
+        self.analyze_doc(doc, &mut context);
+        self.break_decisions = context.break_decisions;
+        self.current_group_id = 0;
+
+        // Pass 2: Render with breaking decisions
         self.write_doc(doc, false);
         std::mem::take(&mut self.output)
+    }
+
+    /// Pass 1: Analyze the doc tree and determine breaking decisions
+    /// Returns (fitted_width, first_line_width, has_force_break) for this doc
+    fn analyze_doc(&mut self, doc: &Doc, context: &mut AnalysisContext) -> (usize, usize, bool) {
+        match doc {
+            Doc::Text(text) => {
+                let width = text.len();
+                (width, width, false)
+            }
+            Doc::ZeroWidthText(_) => (0, 0, false),
+            Doc::Line => (0, 0, false),     // Line has no width when flat
+            Doc::HardLine => (0, 0, false), // HardLine forces a break, so no width contribution
+            Doc::BreakableSpace => (1, 1, false), // Space when flat
+            Doc::Nil => (0, 0, false),
+            Doc::ForceBreak => (0, 0, true), // ForceBreak itself indicates force break!
+
+            Doc::Indent(inner) => {
+                context.current_indent += context.indent_size;
+                let result = self.analyze_doc(inner, context);
+                context.current_indent -= context.indent_size;
+                result
+            }
+
+            Doc::Dedent(inner) => {
+                // Dedent only affects flat mode rendering
+                self.analyze_doc(inner, context)
+            }
+
+            Doc::Docs(docs) => {
+                // For Docs, we need to track across all children
+                let mut has_force_break = false;
+                let mut max_line_width = 0;
+                let mut current_line_width = 0;
+                let mut first_line_width = 0;
+                let mut is_first_line = true;
+
+                for doc in docs {
+                    match doc {
+                        Doc::HardLine => {
+                            max_line_width = max_line_width.max(current_line_width);
+                            if is_first_line {
+                                first_line_width = current_line_width;
+                                is_first_line = false;
+                            }
+                            current_line_width = context.current_indent;
+                        }
+                        _ => {
+                            let (fitted_width, _, doc_has_fb) = self.analyze_doc(doc, context);
+                            current_line_width += fitted_width;
+                            if doc_has_fb {
+                                has_force_break = true;
+                            }
+                        }
+                    }
+                }
+
+                max_line_width = max_line_width.max(current_line_width);
+                if is_first_line {
+                    first_line_width = current_line_width;
+                }
+
+                (max_line_width, first_line_width, has_force_break)
+            }
+
+            Doc::Group(docs) => {
+                // This is the key part - analyze the group and decide if it should break
+                let group_id = context.next_group_id;
+                context.next_group_id += 1;
+
+                let analysis = self.analyze_group(docs, context);
+
+                // Store the breaking decision
+                context
+                    .break_decisions
+                    .insert(group_id, analysis.should_break);
+
+                // Return flat_width (for parent's flat calculation), first_line_width, and has_force_break
+                (
+                    analysis.flat_width,
+                    analysis.first_line_width,
+                    analysis.has_force_break,
+                )
+            }
+        }
+    }
+
+    /// Analyzes a sequence of docs and returns (total_fitted_width, first_line_width)
+    /// This handles docs that may contain HardLines, tracking width across line breaks
+    fn analyze_docs_width(
+        &mut self,
+        docs: &[Doc],
+        context: &mut AnalysisContext,
+    ) -> (usize, usize) {
+        let mut max_line_width = 0;
+        let mut current_line_width = 0;
+        let mut first_line_width = 0;
+        let mut is_first_line = true;
+
+        for doc in docs {
+            match doc {
+                Doc::HardLine => {
+                    // HardLine forces a break - track max width and reset
+                    max_line_width = max_line_width.max(current_line_width);
+                    if is_first_line {
+                        first_line_width = current_line_width;
+                        is_first_line = false;
+                    }
+                    current_line_width = context.current_indent;
+                }
+                _ => {
+                    let (fitted_width, _, _) = self.analyze_doc(doc, context);
+                    current_line_width += fitted_width;
+                }
+            }
+        }
+
+        // Account for the last line
+        max_line_width = max_line_width.max(current_line_width);
+        if is_first_line {
+            first_line_width = current_line_width;
+        }
+
+        (max_line_width, first_line_width)
+    }
+
+    /// Analyzes a group and determines if it should break
+    fn analyze_group(&mut self, docs: &[Doc], context: &mut AnalysisContext) -> GroupAnalysis {
+        let mut has_force_break = false;
+
+        // Calculate width if kept completely flat (all children flat, ignore Line nodes)
+        // Start at 0 because flat content doesn't include indentation
+        let mut flat_width = 0;
+
+        // Calculate width if broken (respecting Line nodes)
+        // Start at current_indent because each line starts with indentation
+        let mut broken_max_line_width = 0;
+        let mut broken_current_line_width = context.current_indent;
+        let mut first_line_width = 0;
+        let mut is_first_line = true;
+
+        for doc in docs {
+            match doc {
+                Doc::HardLine => {
+                    // HardLine always forces a break, affects both flat and broken calculations
+                    has_force_break = true;
+
+                    // For broken calculation
+                    broken_max_line_width = broken_max_line_width.max(broken_current_line_width);
+                    if is_first_line {
+                        first_line_width = broken_current_line_width;
+                        is_first_line = false;
+                    }
+                    broken_current_line_width = context.current_indent;
+
+                    // For flat calculation, HardLine still has no width but forces break
+                }
+
+                Doc::Line => {
+                    // Line is conditional - breaks only if group breaks
+                    // For broken calculation: this ends the current line
+                    broken_max_line_width = broken_max_line_width.max(broken_current_line_width);
+                    if is_first_line {
+                        first_line_width = broken_current_line_width;
+                        is_first_line = false;
+                    }
+                    broken_current_line_width = context.current_indent;
+
+                    // For flat calculation: Line has no width, doesn't break
+                }
+
+                Doc::ForceBreak => {
+                    has_force_break = true;
+                }
+
+                Doc::Group(nested_docs) => {
+                    // Assign ID before recursive call to match rendering order
+                    let nested_group_id = context.next_group_id;
+                    context.next_group_id += 1;
+
+                    // Recursively analyze nested group
+                    let nested_analysis = self.analyze_group(nested_docs, context);
+
+                    // Store the nested group's decision
+                    context
+                        .break_decisions
+                        .insert(nested_group_id, nested_analysis.should_break);
+
+                    // Propagate ForceBreak from nested groups to parent
+                    if nested_analysis.has_force_break {
+                        has_force_break = true;
+                    }
+
+                    // For parent's flat width: ALWAYS use child's flat_width
+                    // This ensures parent makes correct breaking decision
+                    flat_width += nested_analysis.flat_width;
+
+                    // For parent's broken width: if child breaks, only count its first line
+                    // Otherwise, use its flat width (child stays on one line)
+                    let width_contribution = if nested_analysis.should_break {
+                        nested_analysis.first_line_width
+                    } else {
+                        nested_analysis.flat_width
+                    };
+                    broken_current_line_width += width_contribution;
+                }
+
+                _ => {
+                    let (fitted_width, _, doc_has_force_break) = self.analyze_doc(doc, context);
+                    flat_width += fitted_width;
+                    broken_current_line_width += fitted_width;
+
+                    // Propagate ForceBreak from any child doc
+                    if doc_has_force_break {
+                        has_force_break = true;
+                    }
+                }
+            }
+        }
+
+        // Account for the last line in broken calculation
+        broken_max_line_width = broken_max_line_width.max(broken_current_line_width);
+        if is_first_line {
+            first_line_width = broken_current_line_width;
+        }
+
+        // Decide if this group should break based on FLAT width
+        let should_break = has_force_break || flat_width > context.max_width;
+
+        GroupAnalysis {
+            should_break,
+            flat_width,
+            broken_width: broken_max_line_width,
+            first_line_width,
+            has_force_break,
+        }
     }
 
     fn write_doc(&mut self, doc: &Doc, is_flat: bool) {
@@ -135,11 +418,18 @@ impl DocFormatter {
                 }
             }
             Doc::Group(docs) => {
-                let total_length: usize = docs.iter().map(|d| d.width()).sum();
-                let has_force_break = docs.iter().any(|d| d.contains_force_break());
+                // Get the breaking decision from Pass 1
+                let group_id = self.current_group_id;
+                self.current_group_id += 1;
 
-                // Force breaking if width exceeds max OR if contains ForceBreak
-                if total_length > self.max_width || has_force_break {
+                let should_break = self
+                    .break_decisions
+                    .get(&group_id)
+                    .copied()
+                    .unwrap_or(false);
+
+                // Render based on the pre-computed decision
+                if should_break {
                     for doc in docs {
                         self.write_doc(doc, false);
                     }
@@ -241,7 +531,7 @@ impl Formatter {
     /// Parameters:
     /// - body: The statements to format inside the braces
     /// - left_brace: Optional left brace token for comment processing
-    /// - right_brace: Optional right brace token for comment processing  
+    /// - right_brace: Optional right brace token for comment processing
     /// - allow_compact: If true, single statement bodies use compact formatting ({ stmt })
     fn format_statement_body(
         &mut self,

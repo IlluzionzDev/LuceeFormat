@@ -27,18 +27,18 @@ complex rules, and just runs through tokens in microseconds.
 
 ## Breaking TODOS (Need to be done before production code formatter)
 
-- Still seems to be issue with MemberExpression chaining and indented when not broken, and breaking when shouldn't. #1
-  Priority
+- Member access chains (or any docs) break with header comment. Don't consider header comments for line breaks
 - Allow escaping ' with another ' inside string. Lexer should detect '' sequence
 - Passing named args to function doesn't require commas ??
 - Lucee function, allow name only args (without value)
 - Static access can also just access identifiers
-- Handle 'does not contain' statement
 - Indents seem to sometimes indent before line break
 - Indent in case body, first statement isn't indented
 - Instantiation of package components (e.g one.two.three()) need to be on same line. Should check after ObjectCreation
   node
+- Handle 'does not contain' statement
 
 ## Backlog TODOS (Niceties but not critical)
 
 - Arena allocator for AST nodes / Zero Copy AST
+- Ignore formatting comments
