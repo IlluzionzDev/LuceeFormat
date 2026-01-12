@@ -8,6 +8,8 @@ use std::iter;
 pub enum Doc {
     // Represents string literal. No breaks can occur in the middle of the string
     Text(String),
+    // Represents text with no width (often if printing text that is always on it's own line
+    ZeroWidthText(String),
     // Breaks new line that may be condensed (removed). Use if you want to break here if too long
     Line,
     // Always a line break
@@ -81,6 +83,10 @@ impl DocFormatter {
     fn write_doc(&mut self, doc: &Doc, is_flat: bool) {
         match doc {
             Doc::Text(text) => {
+                self.output.push_str(text);
+                self.current_line_length += text.len();
+            }
+            Doc::ZeroWidthText(text) => {
                 self.output.push_str(text);
                 self.current_line_length += text.len();
             }
@@ -470,7 +476,7 @@ impl Formatter {
 
                         let comment_lines: Vec<&str> = formatted_comment.lines().collect();
                         for (i, line) in comment_lines.iter().enumerate() {
-                            docs.push(Doc::Text(String::from(line.trim_end())));
+                            docs.push(Doc::ZeroWidthText(String::from(line.trim_end())));
                             // Add HardLine after each line except for the last line of the last comment when extra_indent is true
                             let is_last_line_of_comment = i == comment_lines.len() - 1;
                             let is_last_comment = comment_idx == comments.len() - 1;
