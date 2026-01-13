@@ -20,7 +20,7 @@ pub enum Doc {
     // Cancels one level of indentation (for block expressions in argument contexts)
     Dedent(Box<Doc>),
     // Main way to group elements together
-    Group(Vec<Doc>),
+    Group(usize, Vec<Doc>),
     Docs(Vec<Doc>), // Just a grouping that renders it's children, doesn't do anything else
     // Space that line breaks can freely happen between, represented by " " if doesn't break
     BreakableSpace,
@@ -35,7 +35,7 @@ impl Doc {
             Doc::Text(text) => text.len(),
             Doc::Indent(doc) => doc.width(),
             Doc::Dedent(doc) => doc.width(),
-            Doc::Group(docs) => docs.iter().map(|doc| doc.width()).sum(),
+            Doc::Group(_, docs) => docs.iter().map(|doc| doc.width()).sum(),
             Doc::Docs(docs) => docs.iter().map(|doc| doc.width()).sum(),
             Doc::BreakableSpace => 1,
             _ => 0,
@@ -48,7 +48,9 @@ impl Doc {
             Doc::ForceBreak => true,
             Doc::Indent(doc) => doc.contains_force_break(),
             Doc::Dedent(doc) => doc.contains_force_break(),
-            Doc::Group(docs) | Doc::Docs(docs) => docs.iter().any(|doc| doc.contains_force_break()),
+            Doc::Group(_, docs) | Doc::Docs(docs) => {
+                docs.iter().any(|doc| doc.contains_force_break())
+            }
             _ => false,
         }
     }
@@ -190,17 +192,14 @@ impl DocFormatter {
                 (max_line_width, first_line_width, has_force_break)
             }
 
-            Doc::Group(docs) => {
+            Doc::Group(group_id, docs) => {
                 // This is the key part - analyze the group and decide if it should break
-                let group_id = context.next_group_id;
-                context.next_group_id += 1;
-
                 let analysis = self.analyze_group(docs, context);
 
                 // Store the breaking decision
                 context
                     .break_decisions
-                    .insert(group_id, analysis.should_break);
+                    .insert(*group_id, analysis.should_break);
 
                 // Return flat_width (for parent's flat calculation), first_line_width, and has_force_break
                 (
@@ -269,10 +268,10 @@ impl DocFormatter {
         for doc in docs {
             match doc {
                 Doc::HardLine => {
-                    // HardLine always forces a break, affects both flat and broken calculations
-                    has_force_break = true;
+                    // HardLine is an unconditional line break within content (e.g., after comments)
+                    // It does NOT force the containing group to break - that's what ForceBreak is for
 
-                    // For broken calculation
+                    // For broken calculation: track the line break
                     broken_max_line_width = broken_max_line_width.max(broken_current_line_width);
                     if is_first_line {
                         first_line_width = broken_current_line_width;
@@ -280,7 +279,7 @@ impl DocFormatter {
                     }
                     broken_current_line_width = context.current_indent;
 
-                    // For flat calculation, HardLine still has no width but forces break
+                    // For flat calculation: HardLine has no width
                 }
 
                 Doc::Line => {
@@ -300,10 +299,8 @@ impl DocFormatter {
                     has_force_break = true;
                 }
 
-                Doc::Group(nested_docs) => {
+                Doc::Group(nested_group_id, nested_docs) => {
                     // Assign ID before recursive call to match rendering order
-                    let nested_group_id = context.next_group_id;
-                    context.next_group_id += 1;
 
                     // Recursively analyze nested group
                     let nested_analysis = self.analyze_group(nested_docs, context);
@@ -311,7 +308,7 @@ impl DocFormatter {
                     // Store the nested group's decision
                     context
                         .break_decisions
-                        .insert(nested_group_id, nested_analysis.should_break);
+                        .insert(*nested_group_id, nested_analysis.should_break);
 
                     // Propagate ForceBreak from nested groups to parent
                     if nested_analysis.has_force_break {
@@ -417,10 +414,8 @@ impl DocFormatter {
                     self.write_doc(doc, is_flat);
                 }
             }
-            Doc::Group(docs) => {
+            Doc::Group(group_id, docs) => {
                 // Get the breaking decision from Pass 1
-                let group_id = self.current_group_id;
-                self.current_group_id += 1;
 
                 let should_break = self
                     .break_decisions
@@ -494,6 +489,8 @@ pub struct Formatter {
     /// Indicates we're formatting a chainable lambda callback pattern: object.method((x) => { body })
     /// When true, function calls and lambdas format compactly (signature inline, only body breaks)
     in_chainable_lambda_context: bool,
+
+    current_group_id: usize,
 }
 
 impl Formatter {
@@ -504,7 +501,13 @@ impl Formatter {
             beginning_statement: true,
             collapse_whitespace: true,
             in_chainable_lambda_context: false,
+            current_group_id: 0,
         }
+    }
+
+    fn next_group_id(&mut self) -> usize {
+        self.current_group_id += 1;
+        self.current_group_id
     }
 
     /// Check if an expression is a block-level expression that needs dedenting when used as an argument
@@ -550,7 +553,7 @@ impl Formatter {
                 docs.push(Doc::Indent(Box::new(self.visit_statement(stmt))));
             });
 
-            return Doc::Group(docs);
+            return Doc::Group(self.next_group_id(), docs);
         }
 
         let mut full_body_docs = vec![];
@@ -611,7 +614,10 @@ impl Formatter {
         }
 
         // Wrap body in indented group
-        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            body_docs,
+        ))));
 
         // Add spacing before closing brace
         if use_compact {
@@ -626,7 +632,7 @@ impl Formatter {
             full_body_docs.push(self.pop_trailing_comments(right_brace_token));
         }
 
-        Doc::Group(full_body_docs)
+        Doc::Group(self.next_group_id(), full_body_docs)
     }
 
     /// Process lines before on a token, and prints 1 newline if there was a blank whitespace
@@ -689,7 +695,8 @@ impl Formatter {
         if docs.is_empty() {
             Doc::Nil
         } else {
-            Doc::Group(docs)
+            // Use Docs instead of Group to avoid creating breaking groups for comments
+            Doc::Docs(docs)
         }
     }
 
@@ -726,7 +733,8 @@ impl Formatter {
         if docs.is_empty() {
             Doc::Nil
         } else {
-            Doc::Group(docs)
+            // Use Docs instead of Group to avoid creating breaking groups for comments
+            Doc::Docs(docs)
         }
     }
 
@@ -788,7 +796,8 @@ impl Formatter {
         if docs.is_empty() {
             Doc::Nil
         } else {
-            Doc::Group(docs)
+            // Use Docs instead of Group to avoid creating breaking groups for comments
+            Doc::Docs(docs)
         }
     }
 
@@ -997,7 +1006,7 @@ impl Formatter {
 
         docs.push(Doc::Indent(Box::new(Doc::Docs(indent_docs))));
 
-        Doc::Group(docs) // Single group for entire mixed chain
+        Doc::Group(self.next_group_id(), docs) // Single group for entire mixed chain
     }
 
     /// Formats a binary expression chain as a single group for consistent line breaking
@@ -1069,9 +1078,12 @@ impl Formatter {
             indent_docs.push(self.visit_expression(&operation.right_operand));
         }
 
-        docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
+        docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            indent_docs,
+        ))));
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     /// Formats a single binary expression (fallback when not part of chain)
@@ -1097,7 +1109,7 @@ impl Formatter {
                 docs.push(Doc::Text(" ".to_string()));
                 docs.push(self.visit_expression(&binary_expr.right));
             }
-            Doc::Group(docs)
+            Doc::Group(self.next_group_id(), docs)
         } else {
             Doc::Nil // Should not happen
         }
@@ -1106,7 +1118,7 @@ impl Formatter {
 
 impl Visitor<Doc> for Formatter {
     fn combine_docs(&mut self, docs: &[Doc]) -> Doc {
-        Doc::Group(docs.to_vec())
+        Doc::Group(self.next_group_id(), docs.to_vec())
     }
 
     fn visit_statement(&mut self, statement: &Statement) -> Doc {
@@ -1137,7 +1149,7 @@ impl Visitor<Doc> for Formatter {
 
         docs.push(Doc::Text(value));
         docs.push(self.pop_trailing_comments(&literal.token));
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_identifier(&mut self, identifier: &Token) -> Doc {
         let mut docs = Vec::with_capacity(4);
@@ -1146,7 +1158,7 @@ impl Visitor<Doc> for Formatter {
         self.beginning_statement = false;
         docs.push(Doc::Text(identifier.lexeme.to_string()));
         docs.push(self.pop_trailing_comments(identifier));
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_function_call(&mut self, function_call: &crate::ast::FunctionCall) -> Doc {
         let mut docs = Vec::with_capacity(10);
@@ -1209,7 +1221,7 @@ impl Visitor<Doc> for Formatter {
                     arg_docs.push(arg_expr_doc);
                 }
 
-                full_arg_docs.push(Doc::Group(arg_docs));
+                full_arg_docs.push(Doc::Group(self.next_group_id(), arg_docs));
 
                 if let Some(comma) = &arg.2 {
                     full_arg_docs.push(self.pop_comment(comma, true));
@@ -1226,7 +1238,10 @@ impl Visitor<Doc> for Formatter {
                     full_arg_docs.push(Doc::BreakableSpace);
                 }
             }
-            docs.push(Doc::Indent(Box::new(Doc::Group(full_arg_docs))));
+            docs.push(Doc::Indent(Box::new(Doc::Group(
+                self.next_group_id(),
+                full_arg_docs,
+            ))));
 
             docs.push(self.pop_comment(&function_call.right_paren, true));
             docs.push(Doc::Line);
@@ -1235,7 +1250,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Text(")".to_string()));
         docs.push(self.pop_trailing_comments(&function_call.right_paren));
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_object_creation(&mut self, object_creation: &crate::ast::ObjectCreation) -> Doc {
         let mut docs = Vec::with_capacity(5);
@@ -1247,7 +1262,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_trailing_comments(&object_creation.new_token));
         docs.push(self.visit_expression(&object_creation.expr));
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_array_expression(&mut self, array_expression: &crate::ast::ArrayExpression) -> Doc {
         let mut docs = Vec::with_capacity(10);
@@ -1280,14 +1295,17 @@ impl Visitor<Doc> for Formatter {
                 args_docs.push(Doc::BreakableSpace);
             }
         }
-        docs.push(Doc::Indent(Box::new(Doc::Group(args_docs))));
+        docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            args_docs,
+        ))));
 
         docs.push(self.pop_comment(&array_expression.right_bracket, true));
         docs.push(Doc::Line);
         docs.push(Doc::Text("]".to_string()));
         docs.push(self.pop_trailing_comments(&array_expression.right_bracket));
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_struct_expression(&mut self, struct_expression: &crate::ast::StructExpression) -> Doc {
         let mut docs = Vec::with_capacity(9);
@@ -1299,7 +1317,7 @@ impl Visitor<Doc> for Formatter {
         if struct_expression.is_empty {
             docs.push(Doc::Text("[:]".to_string()));
             docs.push(self.pop_trailing_comments(&struct_expression.right_brace));
-            return Doc::Group(docs);
+            return Doc::Group(self.next_group_id(), docs);
         }
 
         docs.push(Doc::Text("{".to_string()));
@@ -1342,7 +1360,10 @@ impl Visitor<Doc> for Formatter {
             body_docs.push(closing_comment);
         }
 
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            body_docs,
+        ))));
 
         if !struct_expression.elements.is_empty() {
             docs.push(Doc::BreakableSpace);
@@ -1351,7 +1372,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Text("}".to_string()));
         docs.push(self.pop_trailing_comments(&struct_expression.right_brace));
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_lambda_expression(&mut self, lambda_expression: &crate::ast::LambdaExpression) -> Doc {
         // If calling lambda like function((arg) => {
@@ -1417,7 +1438,7 @@ impl Visitor<Doc> for Formatter {
                 false,
             ));
 
-            return Doc::Group(docs);
+            return Doc::Group(self.next_group_id(), docs);
         }
 
         // NORMAL MODE: Format with Group/Indent wrapping
@@ -1473,7 +1494,10 @@ impl Visitor<Doc> for Formatter {
                 arg_docs.push(Doc::BreakableSpace);
             }
         }
-        full_args_docs.push(Doc::Indent(Box::new(Doc::Group(arg_docs))));
+        full_args_docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            arg_docs,
+        ))));
 
         if lambda_expression.right_paren.is_some() {
             full_args_docs
@@ -1484,7 +1508,7 @@ impl Visitor<Doc> for Formatter {
         if let Some(right_paren) = &lambda_expression.right_paren {
             full_args_docs.push(self.pop_trailing_comments(right_paren))
         }
-        docs.push(Doc::Group(full_args_docs));
+        docs.push(Doc::Group(self.next_group_id(), full_args_docs));
 
         // Only render => token for regular lambdas, not function lambdas
         if lambda_expression.function_token.is_none() {
@@ -1500,7 +1524,7 @@ impl Visitor<Doc> for Formatter {
             true, // lambda expressions can use compact formatting
         ));
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_binary_expression(&mut self, binary_expression: &crate::ast::BinaryExpression) -> Doc {
         // Check if this binary expression's left operand is part of a chain
@@ -1525,7 +1549,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Text(unary_expression.op.lexeme.to_string()));
         docs.push(self.pop_trailing_comments(&unary_expression.op));
         docs.push(self.visit_expression(&unary_expression.expr));
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_ternary_expression(
         &mut self,
@@ -1536,18 +1560,21 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&ternary_expression.question_token, true));
         docs.push(Doc::BreakableSpace);
 
-        docs.push(Doc::Indent(Box::new(Doc::Group(vec![
-            Doc::Text("? ".to_string()),
-            self.pop_trailing_comments(&ternary_expression.question_token),
-            self.visit_expression(&ternary_expression.true_expr),
-            self.pop_comment(&ternary_expression.colon_token, true),
-            Doc::BreakableSpace,
-            Doc::Text(": ".to_string()),
-            self.pop_trailing_comments(&ternary_expression.colon_token),
-            self.visit_expression(&ternary_expression.false_expr),
-        ]))));
+        docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            vec![
+                Doc::Text("? ".to_string()),
+                self.pop_trailing_comments(&ternary_expression.question_token),
+                self.visit_expression(&ternary_expression.true_expr),
+                self.pop_comment(&ternary_expression.colon_token, true),
+                Doc::BreakableSpace,
+                Doc::Text(": ".to_string()),
+                self.pop_trailing_comments(&ternary_expression.colon_token),
+                self.visit_expression(&ternary_expression.false_expr),
+            ],
+        ))));
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_group_expression(&mut self, group_expression: &crate::ast::GroupExpression) -> Doc {
         let mut docs = Vec::with_capacity(10);
@@ -1565,7 +1592,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Line);
         docs.push(Doc::Text(")".to_string()));
         docs.push(self.pop_trailing_comments(&group_expression.right_paren));
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_member_expression(&mut self, member_expression: &crate::ast::MemberAccess) -> Doc {
         // Check for chainable lambda callback pattern: .method((param) => { body })
@@ -1582,7 +1609,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.visit_expression(&member_expression.property));
             self.in_chainable_lambda_context = false;
 
-            return Doc::Group(docs);
+            return Doc::Group(self.next_group_id(), docs);
         }
 
         // Check if this member expression's object is part of an access chain (member or index)
@@ -1622,8 +1649,11 @@ impl Visitor<Doc> for Formatter {
             indent_docs.push(property_doc);
         }
 
-        docs.push(Doc::Indent(Box::new(Doc::Group(indent_docs))));
-        Doc::Group(docs)
+        docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            indent_docs,
+        ))));
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_index_access(&mut self, index_access: &crate::ast::IndexAccess) -> Doc {
         // Check if this index access's object is part of an access chain (member or index)
@@ -1644,7 +1674,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(self.pop_comment(&index_access.right_bracket, true));
         docs.push(Doc::Text("]".to_string()));
         docs.push(self.pop_trailing_comments(&index_access.right_bracket));
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_static_access(&mut self, static_access: &crate::ast::StaticAccess) -> Doc {
         let mut docs = Vec::with_capacity(8);
@@ -1657,7 +1687,7 @@ impl Visitor<Doc> for Formatter {
         docs.push(Doc::Text("::".to_string()));
         docs.push(self.pop_trailing_comments(&static_access.colon_colon_token));
         docs.push(self.visit_function_call(&static_access.function_call));
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     fn visit_expression_statement(
@@ -1673,7 +1703,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     fn visit_variable_declaration(
@@ -1701,7 +1731,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_variable_assignment(
         &mut self,
@@ -1720,7 +1750,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_return_statement(&mut self, return_statement: &crate::ast::ReturnStatement) -> Doc {
         let mut docs = Vec::with_capacity(7);
@@ -1741,7 +1771,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     fn visit_break_statement(&mut self, break_statement: &crate::ast::BreakStatement) -> Doc {
@@ -1765,7 +1795,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     fn visit_continue_statement(
@@ -1795,7 +1825,7 @@ impl Visitor<Doc> for Formatter {
             docs.push(self.pop_trailing_comments(semicolon));
         }
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     fn visit_function_definition(
@@ -1900,7 +1930,7 @@ impl Visitor<Doc> for Formatter {
                 None => {}
             }
 
-            param_docs.push(Doc::Group(param_doc));
+            param_docs.push(Doc::Group(self.next_group_id(), param_doc));
 
             if let Some(comma) = comma_token {
                 param_docs.push(self.pop_comment(comma, true));
@@ -1918,7 +1948,10 @@ impl Visitor<Doc> for Formatter {
                 param_docs.push(Doc::BreakableSpace);
             }
         }
-        arg_docs.push(Doc::Indent(Box::new(Doc::Group(param_docs))));
+        arg_docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            param_docs,
+        ))));
 
         arg_docs.push(self.pop_comment(&function_definition.right_paren, true));
         arg_docs.push(Doc::Line);
@@ -1945,10 +1978,13 @@ impl Visitor<Doc> for Formatter {
             attributes_docs.push(Doc::Text(" ".to_string()));
         }
         if !attributes_docs.is_empty() {
-            arg_docs.push(Doc::Indent(Box::new(Doc::Group(attributes_docs))));
+            arg_docs.push(Doc::Indent(Box::new(Doc::Group(
+                self.next_group_id(),
+                attributes_docs,
+            ))));
         }
 
-        docs.push(Doc::Group(arg_docs));
+        docs.push(Doc::Group(self.next_group_id(), arg_docs));
 
         docs.push(self.format_statement_body(
             &function_definition.body,
@@ -1956,7 +1992,7 @@ impl Visitor<Doc> for Formatter {
             Some(&function_definition.right_brace),
             false, // function bodies don't use compact formatting
         ));
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     fn visit_component_definition(
@@ -1992,10 +2028,13 @@ impl Visitor<Doc> for Formatter {
             arg_docs.remove(arg_docs.len() - 1); // Remove last line break
             arg_docs.push(Doc::Text(" ".to_string()));
         }
-        name_group.push(Doc::Indent(Box::new(Doc::Group(arg_docs))));
+        name_group.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            arg_docs,
+        ))));
 
         name_group.push(self.pop_comment(&component_definition.left_brace, true));
-        docs.push(Doc::Group(name_group));
+        docs.push(Doc::Group(self.next_group_id(), name_group));
         docs.push(Doc::Text("{".to_string()));
         docs.push(self.pop_trailing_comments(&component_definition.left_brace));
 
@@ -2015,12 +2054,15 @@ impl Visitor<Doc> for Formatter {
             body_docs.push(closing_comment);
         }
 
-        docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            body_docs,
+        ))));
 
         docs.push(Doc::HardLine);
         docs.push(Doc::Text("}".to_string()));
         docs.push(self.pop_trailing_comments(&component_definition.right_brace));
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_lucee_function(&mut self, lucee_function: &crate::ast::LuceeFunction) -> Doc {
         let mut docs = Vec::with_capacity(6);
@@ -2053,8 +2095,11 @@ impl Visitor<Doc> for Formatter {
                 param_docs.push(Doc::Text(" ".to_string()));
             }
         }
-        name_group.push(Doc::Indent(Box::new(Doc::Group(param_docs))));
-        docs.push(Doc::Group(name_group));
+        name_group.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            param_docs,
+        ))));
+        docs.push(Doc::Group(self.next_group_id(), name_group));
 
         match &lucee_function.body {
             Some(body) => {
@@ -2076,7 +2121,7 @@ impl Visitor<Doc> for Formatter {
         if let Some(semicolon) = &lucee_function.semicolon_token {
             docs.push(self.pop_trailing_comments(semicolon));
         }
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_if_statement(&mut self, if_statement: &crate::ast::IfStatement) -> Doc {
         let mut docs = Vec::with_capacity(8);
@@ -2091,14 +2136,17 @@ impl Visitor<Doc> for Formatter {
         test_group.push(Doc::Text("(".to_string()));
         test_group.push(self.pop_trailing_comments(&if_statement.left_paren));
         test_group.push(Doc::Line);
-        test_group.push(Doc::Indent(Box::new(Doc::Group(vec![
-            self.visit_expression(&if_statement.condition),
-            self.pop_comment(&if_statement.right_paren, true),
-        ]))));
+        test_group.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            vec![
+                self.visit_expression(&if_statement.condition),
+                self.pop_comment(&if_statement.right_paren, true),
+            ],
+        ))));
         test_group.push(Doc::Line);
         test_group.push(Doc::Text(") ".to_string()));
         test_group.push(self.pop_trailing_comments(&if_statement.right_paren));
-        docs.push(Doc::Group(test_group));
+        docs.push(Doc::Group(self.next_group_id(), test_group));
 
         docs.push(self.format_statement_body(
             &if_statement.body,
@@ -2141,7 +2189,7 @@ impl Visitor<Doc> for Formatter {
             None => {}
         }
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_for_statement(&mut self, for_statement: &crate::ast::ForStatement) -> Doc {
         let mut docs = Vec::with_capacity(4);
@@ -2182,7 +2230,10 @@ impl Visitor<Doc> for Formatter {
                 control_docs.push(self.visit_expression(condition));
                 control_docs.push(Doc::Text("; ".to_string()));
                 control_docs.push(self.visit_expression(increment));
-                arg_docs.push(Doc::Indent(Box::new(Doc::Group(control_docs))));
+                arg_docs.push(Doc::Indent(Box::new(Doc::Group(
+                    self.next_group_id(),
+                    control_docs,
+                ))));
             }
             ForControl::LoopOver {
                 var_token,
@@ -2201,7 +2252,10 @@ impl Visitor<Doc> for Formatter {
                 control_docs.push(self.pop_comment(&in_token, true));
                 control_docs.push(Doc::Text(" in ".to_string()));
                 control_docs.push(self.visit_expression(array));
-                arg_docs.push(Doc::Indent(Box::new(Doc::Group(control_docs))));
+                arg_docs.push(Doc::Indent(Box::new(Doc::Group(
+                    self.next_group_id(),
+                    control_docs,
+                ))));
             }
         }
 
@@ -2209,7 +2263,7 @@ impl Visitor<Doc> for Formatter {
         arg_docs.push(Doc::Line);
         arg_docs.push(Doc::Text(") ".to_string()));
         arg_docs.push(self.pop_trailing_comments(&for_statement.right_paren));
-        docs.push(Doc::Group(arg_docs));
+        docs.push(Doc::Group(self.next_group_id(), arg_docs));
 
         docs.push(self.format_statement_body(
             &for_statement.body,
@@ -2218,7 +2272,7 @@ impl Visitor<Doc> for Formatter {
             false, // for loops don't use compact formatting
         ));
 
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     fn visit_while_statement(&mut self, while_statement: &crate::ast::WhileStatement) -> Doc {
@@ -2259,7 +2313,7 @@ impl Visitor<Doc> for Formatter {
                 while_docs.push(Doc::Text(" ".to_string()));
             }
             while_docs.push(self.pop_trailing_comments(&while_statement.right_paren));
-            docs.push(Doc::Group(while_docs));
+            docs.push(Doc::Group(self.next_group_id(), while_docs));
         }
 
         // Handle body - can be None for bodyless while statements
@@ -2301,7 +2355,7 @@ impl Visitor<Doc> for Formatter {
             while_docs.push(Doc::Line);
             while_docs.push(Doc::Text(")".to_string()));
             while_docs.push(self.pop_trailing_comments(&while_statement.right_paren));
-            docs.push(Doc::Group(while_docs));
+            docs.push(Doc::Group(self.next_group_id(), while_docs));
 
             // Add semicolon for do-while
             if let Some(semicolon) = &while_statement.semicolon_token {
@@ -2310,7 +2364,7 @@ impl Visitor<Doc> for Formatter {
                 docs.push(self.pop_trailing_comments(semicolon));
             }
         }
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 
     fn visit_switch_statement(&mut self, switch_statement: &crate::ast::SwitchStatement) -> Doc {
@@ -2335,7 +2389,7 @@ impl Visitor<Doc> for Formatter {
         switch_docs.push(self.pop_trailing_comments(&switch_statement.right_paren));
         switch_docs.push(self.pop_comment(&switch_statement.left_brace, true));
 
-        docs.push(Doc::Group(switch_docs));
+        docs.push(Doc::Group(self.next_group_id(), switch_docs));
 
         let mut full_body_docs = Vec::with_capacity(6);
         full_body_docs.push(Doc::Text("{".to_string()));
@@ -2380,7 +2434,10 @@ impl Visitor<Doc> for Formatter {
                 inner_docs.remove(inner_docs.len() - 1); // Remove last line break
             }
 
-            body_docs.push(Doc::Indent(Box::new(Doc::Group(inner_docs))));
+            body_docs.push(Doc::Indent(Box::new(Doc::Group(
+                self.next_group_id(),
+                inner_docs,
+            ))));
         });
 
         if switch_statement.right_brace.comments.is_some() {
@@ -2391,13 +2448,16 @@ impl Visitor<Doc> for Formatter {
             body_docs.push(closing_comment);
         }
 
-        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(body_docs))));
+        full_body_docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            body_docs,
+        ))));
 
         full_body_docs.push(Doc::HardLine);
         full_body_docs.push(Doc::Text("}".to_string()));
         full_body_docs.push(self.pop_trailing_comments(&switch_statement.right_brace));
-        docs.push(Doc::Group(full_body_docs));
-        Doc::Group(docs)
+        docs.push(Doc::Group(self.next_group_id(), full_body_docs));
+        Doc::Group(self.next_group_id(), docs)
     }
     fn visit_try_catch_statement(
         &mut self,
@@ -2446,14 +2506,17 @@ impl Visitor<Doc> for Formatter {
         catch_expression_docs.push(Doc::Text(try_catch_statement.catch_var.lexeme.to_string()));
         catch_expression_docs.push(self.pop_trailing_comments(&try_catch_statement.catch_var));
 
-        catch_docs.push(Doc::Indent(Box::new(Doc::Group(catch_expression_docs))));
+        catch_docs.push(Doc::Indent(Box::new(Doc::Group(
+            self.next_group_id(),
+            catch_expression_docs,
+        ))));
 
         catch_docs.push(self.pop_comment(&try_catch_statement.right_paren, true));
         catch_docs.push(Doc::Line);
         catch_docs.push(Doc::Text(") ".to_string()));
         catch_docs.push(self.pop_trailing_comments(&try_catch_statement.right_paren));
 
-        docs.push(Doc::Group(catch_docs));
+        docs.push(Doc::Group(self.next_group_id(), catch_docs));
 
         docs.push(self.format_statement_body(
             &try_catch_statement.catch_body,
@@ -2476,6 +2539,6 @@ impl Visitor<Doc> for Formatter {
                 ));
             }
         }
-        Doc::Group(docs)
+        Doc::Group(self.next_group_id(), docs)
     }
 }
